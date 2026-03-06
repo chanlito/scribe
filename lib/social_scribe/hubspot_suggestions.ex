@@ -98,7 +98,12 @@ defmodule SocialScribe.HubspotSuggestions do
     Enum.map(suggestions, fn suggestion ->
       current_value = get_contact_field(contact, suggestion.field)
 
-      %{suggestion | current_value: current_value, has_change: current_value != suggestion.new_value, apply: true}
+      %{
+        suggestion
+        | current_value: current_value,
+          has_change: current_value != suggestion.new_value,
+          apply: true
+      }
     end)
     |> Enum.filter(fn s -> s.has_change end)
   end

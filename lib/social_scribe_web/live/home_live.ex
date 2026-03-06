@@ -47,11 +47,18 @@ defmodule SocialScribeWeb.HomeLive do
 
           {:error, reason} ->
             Logger.error("Failed to create bot: #{inspect(reason)}")
-            put_flash(socket, :error, "Failed to schedule recording bot. Please check your Recall API configuration.")
+
+            put_flash(
+              socket,
+              :error,
+              "Failed to schedule recording bot. Please check your Recall API configuration."
+            )
         end
       else
         case Bots.cancel_and_delete_bot(event) do
-          {:ok, _} -> socket
+          {:ok, _} ->
+            socket
+
           {:error, reason} ->
             Logger.error("Failed to cancel bot: #{inspect(reason)}")
             socket

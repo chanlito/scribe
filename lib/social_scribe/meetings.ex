@@ -343,7 +343,12 @@ defmodule SocialScribe.Meetings do
   Creates a complete meeting record from Recall.ai bot info, transcript data, and participants.
   This should be called when a bot's status is "done".
   """
-  def create_meeting_from_recall_data(%RecallBot{} = recall_bot, bot_api_info, transcript_data, participants_data) do
+  def create_meeting_from_recall_data(
+        %RecallBot{} = recall_bot,
+        bot_api_info,
+        transcript_data,
+        participants_data
+      ) do
     calendar_event = Repo.preload(recall_bot, :calendar_event).calendar_event
 
     Repo.transaction(fn ->
@@ -441,7 +446,6 @@ defmodule SocialScribe.Meetings do
     end
   end
 
-
   @doc """
   Generates a prompt for a meeting.
   """
@@ -524,6 +528,7 @@ defmodule SocialScribe.Meetings do
     total_seconds = trunc(seconds)
     minutes = div(total_seconds, 60)
     secs = rem(total_seconds, 60)
+
     "#{String.pad_leading(Integer.to_string(minutes), 2, "0")}:#{String.pad_leading(Integer.to_string(secs), 2, "0")}"
   end
 

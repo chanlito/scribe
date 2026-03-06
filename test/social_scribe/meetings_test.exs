@@ -283,7 +283,12 @@ defmodule SocialScribe.MeetingsTest do
       ]
 
       assert {:ok, meeting} =
-               Meetings.create_meeting_from_recall_data(recall_bot, bot_api_info, transcript_data, participants_data)
+               Meetings.create_meeting_from_recall_data(
+                 recall_bot,
+                 bot_api_info,
+                 transcript_data,
+                 participants_data
+               )
 
       # Verify meeting was created with correct attributes
       assert meeting.title == "Test Meeting"
@@ -302,12 +307,12 @@ defmodule SocialScribe.MeetingsTest do
       assert length(meeting.meeting_participants) == 2
 
       assert Enum.any?(meeting.meeting_participants, fn p ->
-        p.name == "Felipe Gomes Paradas" and p.is_host == true
-      end)
+               p.name == "Felipe Gomes Paradas" and p.is_host == true
+             end)
 
       assert Enum.any?(meeting.meeting_participants, fn p ->
-        p.name == "John Doe" and p.is_host == false
-      end)
+               p.name == "John Doe" and p.is_host == false
+             end)
     end
   end
 

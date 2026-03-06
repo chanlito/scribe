@@ -126,10 +126,13 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
 
       # Expect API call to get participants
       expect(RecallApiMock, :get_bot_participants, fn "bot-done-456" ->
-        {:ok, %Tesla.Env{body: [
-          %{id: 100, name: "Felipe Gomes Paradas", is_host: true},
-          %{id: 101, name: "John Doe", is_host: false}
-        ]}}
+        {:ok,
+         %Tesla.Env{
+           body: [
+             %{id: 100, name: "Felipe Gomes Paradas", is_host: true},
+             %{id: 101, name: "John Doe", is_host: false}
+           ]
+         }}
       end)
 
       expect(AIGeneratorMock, :generate_follow_up_email, fn @mock_transcript_data ->
@@ -156,7 +159,11 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
         Repo.all(from p in Meetings.MeetingParticipant, where: p.meeting_id == ^meeting_id)
 
       assert Enum.count(participants) == 2
-      assert Enum.any?(participants, fn p -> p.name == "Felipe Gomes Paradas" and p.is_host == true end)
+
+      assert Enum.any?(participants, fn p ->
+               p.name == "Felipe Gomes Paradas" and p.is_host == true
+             end)
+
       assert Enum.any?(participants, fn p -> p.name == "John Doe" and p.is_host == false end)
 
       # Assert AI content generation worker was enqueued

@@ -224,8 +224,10 @@ defmodule SocialScribe.HubspotApi do
 
   defp is_token_error?(%{"status" => "BAD_CLIENT_ID"}), do: true
   defp is_token_error?(%{"status" => "UNAUTHORIZED"}), do: true
+
   defp is_token_error?(%{"message" => msg}) when is_binary(msg) do
     String.contains?(String.downcase(msg), ["token", "expired", "unauthorized", "client id"])
   end
+
   defp is_token_error?(_), do: false
 end

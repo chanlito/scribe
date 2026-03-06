@@ -47,19 +47,18 @@
                 )}
               </p>
               <p class="text-xs text-slate-500 mt-1 ">
-                <% 
-                  names =
-                    meeting.meeting_participants
-                    |> Enum.map(fn p ->
-                      name = p.name || ""
-                      if name == "", do: "Unknown", else: name
-                    end)
+                <% names =
+                  meeting.meeting_participants
+                  |> Enum.map(fn p ->
+                    name = p.name || ""
+                    if name == "", do: "Unknown", else: name
+                  end)
 
-                  shown = Enum.take(names, 3)
-                  remaining = max(length(names) - length(shown), 0)
-                %>
-                Attendees:
-                {Enum.join(shown, ", ")}
+                shown = Enum.take(names, 3)
+                remaining = max(length(names) - length(shown), 0) %> Attendees: {Enum.join(
+                  shown,
+                  ", "
+                )}
                 <%= if remaining > 0 do %>
                   +{remaining} more
                 <% end %>

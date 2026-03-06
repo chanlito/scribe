@@ -52,14 +52,23 @@ defmodule SocialScribe.Workers.BotStatusPoller do
   end
 
   defp process_completed_bot(bot_record, bot_api_info) do
-    Logger.info("Bot #{bot_record.recall_bot_id} is done. Fetching transcript and participants...")
+    Logger.info(
+      "Bot #{bot_record.recall_bot_id} is done. Fetching transcript and participants..."
+    )
 
     with {:ok, %Tesla.Env{body: transcript_data}} <-
            RecallApi.get_bot_transcript(bot_record.recall_bot_id),
          {:ok, participants_data} <- fetch_participants(bot_record.recall_bot_id) do
-      Logger.info("Successfully fetched transcript and participants for bot #{bot_record.recall_bot_id}")
+      Logger.info(
+        "Successfully fetched transcript and participants for bot #{bot_record.recall_bot_id}"
+      )
 
-      case Meetings.create_meeting_from_recall_data(bot_record, bot_api_info, transcript_data, participants_data) do
+      case Meetings.create_meeting_from_recall_data(
+             bot_record,
+             bot_api_info,
+             transcript_data,
+             participants_data
+           ) do
         {:ok, meeting} ->
           Logger.info(
             "Successfully created meeting record #{meeting.id} from bot #{bot_record.recall_bot_id}"
@@ -89,7 +98,10 @@ defmodule SocialScribe.Workers.BotStatusPoller do
         {:ok, participants_data}
 
       {:error, reason} ->
-        Logger.warning("Could not fetch participants for bot #{recall_bot_id}: #{inspect(reason)}, falling back to empty list")
+        Logger.warning(
+          "Could not fetch participants for bot #{recall_bot_id}: #{inspect(reason)}, falling back to empty list"
+        )
+
         {:ok, []}
     end
   end

@@ -29,15 +29,17 @@ defmodule SocialScribe.HubspotApiPropertyTest do
       %{credential: credential}
     end
 
-    property "returns {:ok, :no_updates} when all updates have apply: false", %{credential: credential} do
-      check all updates <- list_of(update_generator(apply: false), min_length: 1, max_length: 10) do
+    property "returns {:ok, :no_updates} when all updates have apply: false", %{
+      credential: credential
+    } do
+      check all(updates <- list_of(update_generator(apply: false), min_length: 1, max_length: 10)) do
         result = SocialScribe.HubspotApi.apply_updates(credential, "123", updates)
         assert result == {:ok, :no_updates}
       end
     end
 
     property "returns {:ok, :no_updates} for empty updates list", %{credential: credential} do
-      check all contact_id <- string(:alphanumeric, min_length: 1, max_length: 20) do
+      check all(contact_id <- string(:alphanumeric, min_length: 1, max_length: 20)) do
         result = SocialScribe.HubspotApi.apply_updates(credential, contact_id, [])
         assert result == {:ok, :no_updates}
       end
@@ -46,7 +48,7 @@ defmodule SocialScribe.HubspotApiPropertyTest do
 
   describe "build_updates_map/1 logic properties" do
     property "filtering and mapping only includes apply: true fields" do
-      check all updates <- list_of(update_generator(), min_length: 1, max_length: 10) do
+      check all(updates <- list_of(update_generator(), min_length: 1, max_length: 10)) do
         # Replicate the internal logic of apply_updates
         updates_map =
           updates
@@ -70,7 +72,7 @@ defmodule SocialScribe.HubspotApiPropertyTest do
     end
 
     property "map values match new_value from the last update for each field" do
-      check all updates <- list_of(update_generator(), min_length: 1, max_length: 10) do
+      check all(updates <- list_of(update_generator(), min_length: 1, max_length: 10)) do
         updates_map =
           updates
           |> Enum.filter(fn update -> update[:apply] == true end)
@@ -82,7 +84,7 @@ defmodule SocialScribe.HubspotApiPropertyTest do
         for {field, value} <- updates_map do
           matching_updates =
             updates
-            |> Enum.filter(& &1[:apply] && &1.field == field)
+            |> Enum.filter(&(&1[:apply] && &1.field == field))
 
           assert Enum.any?(matching_updates, &(&1.new_value == value)),
                  "Value #{inspect(value)} for #{field} should come from an applied update"
@@ -91,7 +93,7 @@ defmodule SocialScribe.HubspotApiPropertyTest do
     end
 
     property "map size is at most the number of unique applied fields" do
-      check all updates <- list_of(update_generator(), min_length: 0, max_length: 10) do
+      check all(updates <- list_of(update_generator(), min_length: 0, max_length: 10)) do
         updates_map =
           updates
           |> Enum.filter(fn update -> update[:apply] == true end)
@@ -111,7 +113,7 @@ defmodule SocialScribe.HubspotApiPropertyTest do
     end
 
     property "empty result when no updates have apply: true" do
-      check all updates <- list_of(update_generator(apply: false), min_length: 0, max_length: 10) do
+      check all(updates <- list_of(update_generator(apply: false), min_length: 0, max_length: 10)) do
         updates_map =
           updates
           |> Enum.filter(fn update -> update[:apply] == true end)
@@ -129,9 +131,11 @@ defmodule SocialScribe.HubspotApiPropertyTest do
   defp update_generator(opts \\ []) do
     apply_value = Keyword.get(opts, :apply, :random)
 
-    gen all field <- member_of(@hubspot_fields),
-            new_value <- string(:alphanumeric, min_length: 1, max_length: 50),
-            apply? <- if(apply_value == :random, do: boolean(), else: constant(apply_value)) do
+    gen all(
+          field <- member_of(@hubspot_fields),
+          new_value <- string(:alphanumeric, min_length: 1, max_length: 50),
+          apply? <- if(apply_value == :random, do: boolean(), else: constant(apply_value))
+        ) do
       %{field: field, new_value: new_value, apply: apply?}
     end
   end
