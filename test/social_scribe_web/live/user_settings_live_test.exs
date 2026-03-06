@@ -19,6 +19,7 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
 
       assert has_element?(view, "h1", "User Settings")
+      assert has_element?(view, "h2", "Connected Salesforce Accounts")
       assert has_element?(view, "h2", "Connected Google Accounts")
       assert has_element?(view, "a", "Connect another Google Account")
     end
@@ -47,6 +48,48 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
       assert has_element?(view, "li", "UID: google-uid-123")
       assert has_element?(view, "li", "(linked_account@example.com)")
       refute has_element?(view, "p", "You haven't connected any Google accounts yet.")
+    end
+
+    test "renders Salesforce section above HubSpot", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
+      html = render(view)
+
+      {salesforce_index, _} = :binary.match(html, "Connected Salesforce Accounts")
+      {hubspot_index, _} = :binary.match(html, "Connected HubSpot Accounts")
+
+      assert salesforce_index < hubspot_index
+    end
+
+    test "shows custom domain input when Salesforce env is custom", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
+
+      refute has_element?(view, "input[placeholder='acme.my.salesforce.com']")
+
+      view
+      |> element("form[phx-submit='connect_salesforce']")
+      |> render_change(%{"salesforce_connect" => %{"env" => "custom", "domain" => ""}})
+
+      assert has_element?(view, "input[placeholder='acme.my.salesforce.com']")
+      assert has_element?(view, "p", "Please enter a domain like acme.my.salesforce.com")
+    end
+
+    test "validates Salesforce custom domain and redirects for sandbox", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
+
+      html =
+        view
+        |> element("form[phx-submit='connect_salesforce']")
+        |> render_change(%{
+          "salesforce_connect" => %{"env" => "custom", "domain" => "bad.example.com"}
+        })
+
+      assert html =~ "Domain must end with .salesforce.com"
+
+      view
+      |> element("form[phx-submit='connect_salesforce']")
+      |> render_submit(%{"salesforce_connect" => %{"env" => "sandbox", "domain" => ""}})
+
+      assert_redirect(view, ~p"/auth/salesforce?env=sandbox")
     end
   end
 end

@@ -4,6 +4,8 @@ defmodule SocialScribeWeb.UserSettingsLive do
   alias SocialScribe.Accounts
   alias SocialScribe.Bots
 
+  @salesforce_domain_suffix ".salesforce.com"
+
   @impl true
   def mount(_params, _session, socket) do
     current_user = socket.assigns.current_user
@@ -13,6 +15,8 @@ defmodule SocialScribeWeb.UserSettingsLive do
     linkedin_accounts = Accounts.list_user_credentials(current_user, provider: "linkedin")
 
     facebook_accounts = Accounts.list_user_credentials(current_user, provider: "facebook")
+
+    salesforce_accounts = Accounts.list_user_credentials(current_user, provider: "salesforce")
 
     hubspot_accounts = Accounts.list_user_credentials(current_user, provider: "hubspot")
 
@@ -27,7 +31,9 @@ defmodule SocialScribeWeb.UserSettingsLive do
       |> assign(:google_accounts, google_accounts)
       |> assign(:linkedin_accounts, linkedin_accounts)
       |> assign(:facebook_accounts, facebook_accounts)
+      |> assign(:salesforce_accounts, salesforce_accounts)
       |> assign(:hubspot_accounts, hubspot_accounts)
+      |> assign_salesforce_connect_form("prod", "", nil)
       |> assign(:user_bot_preference, user_bot_preference)
       |> assign(:user_bot_preference_form, to_form(changeset))
 
@@ -87,6 +93,30 @@ defmodule SocialScribeWeb.UserSettingsLive do
   end
 
   @impl true
+  def handle_event("salesforce_connect_change", %{"salesforce_connect" => params}, socket) do
+    env = Map.get(params, "env", "prod")
+    domain = Map.get(params, "domain", "")
+
+    error = validate_salesforce_domain(env, domain)
+
+    {:noreply, assign_salesforce_connect_form(socket, env, domain, error)}
+  end
+
+  @impl true
+  def handle_event("connect_salesforce", %{"salesforce_connect" => params}, socket) do
+    env = Map.get(params, "env", "prod")
+    domain = Map.get(params, "domain", "")
+
+    case validate_salesforce_domain(env, domain) do
+      nil ->
+        {:noreply, redirect(socket, to: salesforce_auth_path(env, domain))}
+
+      error ->
+        {:noreply, assign_salesforce_connect_form(socket, env, domain, error)}
+    end
+  end
+
+  @impl true
   def handle_event("select_facebook_page", %{"facebook_page" => facebook_page}, socket) do
     facebook_page_credential = Accounts.get_facebook_page_credential!(facebook_page)
 
@@ -113,4 +143,52 @@ defmodule SocialScribeWeb.UserSettingsLive do
         Bots.update_user_bot_preference(bot_preference, params)
     end
   end
+
+  defp assign_salesforce_connect_form(socket, env, domain, error) do
+    socket
+    |> assign(:salesforce_connect_env, env)
+    |> assign(:salesforce_domain_error, error)
+    |> assign(
+      :salesforce_connect_form,
+      to_form(%{"env" => env, "domain" => domain}, as: :salesforce_connect)
+    )
+  end
+
+  defp salesforce_auth_path("prod", _domain), do: ~p"/auth/salesforce?env=prod"
+  defp salesforce_auth_path("sandbox", _domain), do: ~p"/auth/salesforce?env=sandbox"
+
+  defp salesforce_auth_path("custom", domain) do
+    ~p"/auth/salesforce?env=custom&domain=#{String.trim(domain)}"
+  end
+
+  defp salesforce_auth_path(_, _domain), do: ~p"/auth/salesforce?env=prod"
+
+  defp validate_salesforce_domain("prod", _domain), do: nil
+  defp validate_salesforce_domain("sandbox", _domain), do: nil
+
+  defp validate_salesforce_domain("custom", domain) do
+    normalized = String.trim(domain || "")
+
+    cond do
+      normalized == "" ->
+        "Please enter a domain like acme.my.salesforce.com"
+
+      String.contains?(normalized, "://") ->
+        "Use a host only, without https://"
+
+      String.contains?(normalized, "/") ->
+        "Domain must not include path segments"
+
+      not Regex.match?(~r/\A[a-z0-9][a-z0-9.-]*\z/i, normalized) ->
+        "Invalid domain format"
+
+      not String.ends_with?(String.downcase(normalized), @salesforce_domain_suffix) ->
+        "Domain must end with #{@salesforce_domain_suffix}"
+
+      true ->
+        nil
+    end
+  end
+
+  defp validate_salesforce_domain(_, _domain), do: "Please choose a valid environment"
 end

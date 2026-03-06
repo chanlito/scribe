@@ -95,6 +95,12 @@ config :ueberauth, Ueberauth,
        [
          default_scope: "email,public_profile,pages_show_list,pages_manage_posts"
        ]},
+    salesforce:
+      {Ueberauth.Strategy.Salesforce,
+       [
+         default_scope: "api refresh_token",
+         callback_params: ["env", "domain"]
+       ]},
     hubspot:
       {Ueberauth.Strategy.Hubspot,
        [
