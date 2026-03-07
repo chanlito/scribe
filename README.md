@@ -187,6 +187,28 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
 ---
 
+## 🔗 Salesforce Integration
+
+### Salesforce OAuth Integration
+
+* **Custom Ueberauth Strategy:** Implemented in `lib/ueberauth/strategy/salesforce.ex` and `lib/ueberauth/strategy/salesforce/oauth.ex`
+* **OAuth 2.0 Flow:** Supports `prod`, `sandbox`, and validated custom Salesforce domains (`*.salesforce.com`)
+* **Credential Storage:** Credentials stored in `user_credentials` table with `provider: "salesforce"`, including token metadata like `instance_url` and identity URL
+* **Token Refresh:**
+    * `SalesforceTokenRefresher` ensures tokens are refreshed before expiry
+    * API calls use a retry-on-auth-failure flow that refreshes and retries when Salesforce returns token errors
+
+### Salesforce Modal UI
+
+* **LiveView Component:** Located at `lib/social_scribe_web/live/meeting_live/salesforce_modal_component.ex`
+* **Account Selection:** If multiple Salesforce accounts are connected, users can select which account to use
+* **Contact Search:** Debounced search queries Salesforce Contacts and filters to records owned by the connected Salesforce user
+* **AI Suggestions:** `SalesforceSuggestions.generate_suggestions` combines transcript context and Salesforce Contact field metadata to generate update candidates
+* **Field Mapping + Validation:** Users can remap suggestion fields, edit values, and submit only changed fields
+* **Form Submission:** Selected updates are validated/coerced by field type and patched via `SalesforceApi.update_contact`
+
+---
+
 ## ⚠️ Known Issues & Limitations
 
 * **Facebook Posting & App Review:**
