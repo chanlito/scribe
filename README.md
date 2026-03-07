@@ -222,6 +222,7 @@ The CRM layer uses a **Registry + Provider behaviour** pattern. Adding a new CRM
 | `SocialScribe.CRM.Provider` | Behaviour contract all providers must implement |
 | `SocialScribe.CRM.Registry` | Central list of provider modules; drives the UI automatically |
 | `SocialScribe.CRM.GeminiErrors` | Shared Gemini API error formatting (delegate to this from `format_suggestion_error/1`) |
+| `SocialScribe.CRM.SuggestionsHelpers` | Shared utilities for `suggestions.ex` — transcript indexing, timestamp resolution, value normalization (`normalize_for_display/1`, `changed?/2`), deduplication (`dedupe_suggestions/1`), and low-level map/text helpers |
 | `SocialScribeWeb.MeetingLive.Show` | Provider-agnostic; loads providers via `Registry.providers_for_user/1` |
 | `SocialScribeWeb.MeetingLive.CrmModalComponent` | Shared modal UI; receives a `provider` module as a prop |
 
@@ -238,6 +239,7 @@ Create three files under `lib/social_scribe/crm/providers/<provider>/`:
 **`suggestions.ex`**
 - Transcript → CRM suggestion generation and normalization
 - Expose `default_mapping_fields/0` returning a list of `%{name, label, type, options}` maps
+- Use `SocialScribe.CRM.SuggestionsHelpers` for all shared logic: transcript indexing (`build_transcript_index/1`), timestamp resolution (`resolve_timestamp/4`), value normalization (`normalize_for_display/1`, `changed?/2`), deduplication (`dedupe_suggestions/1`), and low-level map/text utilities. Only implement provider-specific logic: field key normalization, contact field extraction, AI generation call, suggestion ID format, and field metadata.
 
 **`provider.ex`**
 - `@behaviour SocialScribe.CRM.Provider`
