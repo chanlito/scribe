@@ -6,6 +6,7 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
   alias SocialScribe.Accounts
   alias SocialScribe.CRM.Providers.Salesforce.Api
   alias SocialScribe.CRM.Providers.Salesforce.Suggestions
+  alias SocialScribe.CRM.SuggestionsHelpers
 
   @impl true
   def provider_id, do: :salesforce
@@ -52,12 +53,26 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
   @impl true
   def generate_suggestions(credential, contact, meeting) do
     case Suggestions.generate_suggestions(credential, contact.id, meeting) do
-      {:ok, %{contact: full_contact, suggestions: suggestions, mapping_fields: mapping_fields}} ->
+      {:ok,
+       %{
+         contact: full_contact,
+         suggestions: suggestions,
+         mapping_fields: mapping_fields,
+         raw_ai_count: raw_ai_count
+       }} ->
+        notice =
+          cond do
+            raw_ai_count == 0 -> :no_ai_suggestions
+            Enum.empty?(suggestions) -> :all_up_to_date
+            true -> nil
+          end
+
         {:ok,
          %{
            selected_contact: full_contact,
            suggestions: suggestions,
-           mapping_fields: mapping_fields
+           mapping_fields: mapping_fields,
+           notice: notice
          }}
 
       {:error, reason} ->
@@ -263,23 +278,8 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
     end)
   end
 
-  defp sanitize_suggestion_value(field, label, value, :new) when is_binary(value) do
-    if Suggestions.identifier_like_value?(field, label, value) do
-      nil
-    else
-      value
-    end
-  end
-
-  defp sanitize_suggestion_value(field, label, value, :current) when is_binary(value) do
-    if Suggestions.identifier_like_value?(field, label, value) do
-      nil
-    else
-      value
-    end
-  end
-
-  defp sanitize_suggestion_value(_field, _label, value, _kind), do: value
+  defp sanitize_suggestion_value(field, label, value, _kind),
+    do: SuggestionsHelpers.sanitize_suggestion_value(field, label, value)
 
   defp invalid_suggestion_row?(suggestion) do
     new_value = Map.get(suggestion, :new_value)
@@ -361,32 +361,8 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
     suggestions ++ additional_rows
   end
 
-  defp apply_duplicate_validation(suggestions) do
-    selected_suggestions = Enum.filter(suggestions, &(&1.apply == true))
-
-    duplicates =
-      selected_suggestions
-      |> Enum.group_by(& &1.mapped_field)
-      |> Enum.filter(fn {_field, mapped} -> length(mapped) > 1 end)
-
-    case duplicates do
-      [] ->
-        {suggestions, nil}
-
-      duplicate_groups ->
-        duplicate_fields =
-          duplicate_groups
-          |> Enum.map(fn {_field, mapped} ->
-            mapped
-            |> List.first()
-            |> Map.get(:mapped_label, "Unknown field")
-          end)
-          |> Enum.join(", ")
-
-        {suggestions,
-         "Each Salesforce field can only be updated once per submit. Duplicate mappings: #{duplicate_fields}"}
-    end
-  end
+  defp apply_duplicate_validation(suggestions),
+    do: SuggestionsHelpers.apply_duplicate_validation(suggestions)
 
   defp toggled_apply_row_id(%{"_target" => ["apply", row_id]}) when is_binary(row_id), do: row_id
   defp toggled_apply_row_id(_params), do: nil

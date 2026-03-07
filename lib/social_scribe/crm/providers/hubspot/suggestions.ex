@@ -52,10 +52,40 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Suggestions do
       %{
         name: field,
         label: Map.get(@field_labels, field, field),
-        type: "string",
+        type: "text",
         options: []
       }
     end)
+  end
+
+  @doc """
+  Builds a mapping_fields list from the HubSpot Properties API response,
+  restricted to the allowed field list. Falls back to default_mapping_fields
+  on error or empty response.
+  """
+  def build_mapping_fields(credential) do
+    case api_impl().describe_contact_fields(credential) do
+      {:ok, fields} when is_list(fields) and fields != [] ->
+        fields
+        |> Enum.filter(fn field ->
+          name = Map.get(field, :name) || Map.get(field, "name")
+          allowed_field?(normalize_field_key(name))
+        end)
+        |> Enum.map(fn field ->
+          name = normalize_field_key(Map.get(field, :name) || Map.get(field, "name"))
+          label = Map.get(field, :label) || Map.get(field, "label") || Map.get(@field_labels, name, name)
+          type = Map.get(field, :type) || Map.get(field, "type") || "text"
+          options = Map.get(field, :options) || Map.get(field, "options") || []
+          %{name: name, label: label, type: type, options: options}
+        end)
+        |> case do
+          [] -> default_mapping_fields()
+          mapped -> mapped
+        end
+
+      _ ->
+        default_mapping_fields()
+    end
   end
 
   @doc """

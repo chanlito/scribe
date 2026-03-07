@@ -65,7 +65,13 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
           id_value_source: :normalized
         )
 
-      {:ok, %{contact: contact, suggestions: suggestions, mapping_fields: mapping_fields}}
+      {:ok,
+       %{
+         contact: contact,
+         suggestions: suggestions,
+         mapping_fields: mapping_fields,
+         raw_ai_count: length(ai_suggestions)
+       }}
     end
   end
 
@@ -331,14 +337,27 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     |> List.wrap()
     |> Enum.map(fn option ->
       case option do
-        %{value: value} when is_binary(value) -> String.trim(value)
-        %{"value" => value} when is_binary(value) -> String.trim(value)
-        _ -> nil
+        %{value: value, label: label} when is_binary(value) ->
+          %{label: label || value, value: String.trim(value)}
+
+        %{"value" => value, "label" => label} when is_binary(value) ->
+          %{label: label || value, value: String.trim(value)}
+
+        %{value: value} when is_binary(value) ->
+          trimmed = String.trim(value)
+          %{label: trimmed, value: trimmed}
+
+        %{"value" => value} when is_binary(value) ->
+          trimmed = String.trim(value)
+          %{label: trimmed, value: trimmed}
+
+        _ ->
+          nil
       end
     end)
     |> Enum.reject(&is_nil/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.uniq()
+    |> Enum.reject(fn %{value: v} -> v == "" end)
+    |> Enum.uniq_by(& &1.value)
   end
 
   # ---------------------------------------------------------------------------

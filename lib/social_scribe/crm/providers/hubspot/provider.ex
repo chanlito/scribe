@@ -6,6 +6,7 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   alias SocialScribe.Accounts
   alias SocialScribe.CRM.Providers.Hubspot.Api
   alias SocialScribe.CRM.Providers.Hubspot.Suggestions
+  alias SocialScribe.CRM.SuggestionsHelpers
 
   @impl true
   def provider_id, do: :hubspot
@@ -26,8 +27,8 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   def capabilities do
     %{
       account_selection: false,
-      mapping: false,
-      mapping_toggle: false,
+      mapping: true,
+      mapping_toggle: true,
       details_toggle: true,
       lock_on_submit: true,
       paired_fields: false
@@ -53,16 +54,26 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   end
 
   @impl true
-  def generate_suggestions(_credential, contact, meeting) do
+  def generate_suggestions(credential, contact, meeting) do
+    mapping_fields = Suggestions.build_mapping_fields(credential)
+
     case Suggestions.generate_suggestions_from_meeting(meeting) do
-      {:ok, suggestions} ->
-        merged = Suggestions.merge_with_contact(suggestions, contact)
+      {:ok, ai_suggestions} ->
+        merged = Suggestions.merge_with_contact(ai_suggestions, contact)
+
+        notice =
+          cond do
+            Enum.empty?(ai_suggestions) -> :no_ai_suggestions
+            Enum.empty?(merged) -> :all_up_to_date
+            true -> nil
+          end
 
         {:ok,
          %{
            selected_contact: contact,
            suggestions: merged,
-           mapping_fields: Suggestions.default_mapping_fields()
+           mapping_fields: mapping_fields,
+           notice: notice
          }}
 
       {:error, reason} ->
@@ -74,47 +85,59 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   def default_mapping_fields, do: Suggestions.default_mapping_fields()
 
   @impl true
-  def prepare_suggestions(suggestions, _selected_contact, mapping_fields) do
+  def prepare_suggestions(suggestions, selected_contact, mapping_fields) do
     prepared =
       suggestions
       |> Enum.with_index(1)
       |> Enum.map(fn {suggestion, idx} -> prepare_row(suggestion, idx, mapping_fields) end)
       |> Enum.filter(& &1.has_change)
+      |> ensure_existing_contact_rows(selected_contact, mapping_fields)
 
     {prepared, nil}
   end
 
   @impl true
-  def apply_form_state(suggestions, params, selected_contact, _mapping_fields) do
+  def apply_form_state(suggestions, params, selected_contact, mapping_fields) do
     applied_rows = Map.get(params, "apply", %{})
     values = Map.get(params, "values", %{})
+    mapped_fields_params = Map.get(params, "mapped_fields", %{})
     checked_rows = Map.keys(applied_rows)
 
     prepared =
       Enum.map(suggestions, fn suggestion ->
         row_id = suggestion.id
-        field = suggestion.mapped_field || suggestion.field
+
+        mapped_field =
+          mapped_fields_params
+          |> Map.get(row_id, suggestion.mapped_field || suggestion.field)
+          |> Suggestions.normalize_field_key()
+
+        mapped_label = mapping_field_label(mapping_fields, mapped_field, suggestion)
 
         current_value =
           selected_contact
-          |> Suggestions.contact_field_value(field)
-          |> then(&Suggestions.normalize_field_value(field, &1))
+          |> Suggestions.contact_field_value(mapped_field)
+          |> then(&Suggestions.normalize_field_value(mapped_field, &1))
+          |> then(&SuggestionsHelpers.sanitize_suggestion_value(mapped_field, mapped_label, &1))
 
         new_value =
           values
           |> Map.get(row_id, suggestion.new_value || "")
-          |> then(&Suggestions.normalize_field_value(field, &1))
+          |> then(&Suggestions.normalize_field_value(mapped_field, &1))
+          |> then(&SuggestionsHelpers.sanitize_suggestion_value(mapped_field, mapped_label, &1))
 
         has_change = Suggestions.changed?(current_value, new_value)
 
         suggestion
+        |> Map.put(:mapped_field, mapped_field)
+        |> Map.put(:mapped_label, mapped_label)
         |> Map.put(:current_value, current_value)
         |> Map.put(:new_value, new_value)
         |> Map.put(:has_change, has_change)
         |> Map.put(:apply, row_id in checked_rows)
       end)
 
-    {prepared, nil}
+    SuggestionsHelpers.apply_duplicate_validation(prepared)
   end
 
   @impl true
@@ -145,24 +168,54 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   end
 
   @impl true
+  def format_update_error({:api_error, 400, %{"message" => message}}) when is_binary(message) do
+    "HubSpot rejected the update: #{message}"
+  end
+
+  def format_update_error({:api_error, 400, body}) when is_list(body) do
+    details =
+      body
+      |> Enum.map(fn entry -> Map.get(entry, "message", "Unknown error") end)
+      |> Enum.join("; ")
+
+    "HubSpot rejected the update: #{details}"
+  end
+
+  def format_update_error({:api_error, status, _body}) do
+    "HubSpot API error (#{status}). Please try again."
+  end
+
+  def format_update_error({:http_error, _reason}) do
+    "Could not connect to HubSpot. Please check your connection and try again."
+  end
+
+  def format_update_error({:token_refresh_failed, _reason}) do
+    "Your HubSpot session has expired. Please reconnect HubSpot and try again."
+  end
+
   def format_update_error(reason), do: "Failed to update contact: #{inspect(reason)}"
 
   defp prepare_row(suggestion, idx, mapping_fields) do
     field = Map.get(suggestion, :mapped_field, Map.get(suggestion, :field))
-    current_value = Suggestions.normalize_field_value(field, Map.get(suggestion, :current_value))
+    mapped_label = mapping_field_label(mapping_fields, field, suggestion)
+
+    current_value =
+      Suggestions.normalize_field_value(field, Map.get(suggestion, :current_value))
+      |> then(&SuggestionsHelpers.sanitize_suggestion_value(field, mapped_label, &1))
 
     new_value =
       Suggestions.normalize_field_value(
         field,
         Map.get(suggestion, :new_value, Map.get(suggestion, :value, ""))
       )
+      |> then(&SuggestionsHelpers.sanitize_suggestion_value(field, mapped_label, &1))
 
     has_change = Suggestions.changed?(current_value, new_value)
 
     suggestion
     |> Map.put_new(:id, "hubspot-suggestion-#{idx}")
     |> Map.put(:mapped_field, field)
-    |> Map.put(:mapped_label, mapping_field_label(mapping_fields, field, suggestion))
+    |> Map.put(:mapped_label, mapped_label)
     |> Map.put(:current_value, current_value)
     |> Map.put(:new_value, new_value)
     |> Map.put(:has_change, has_change)
@@ -177,6 +230,69 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
       field -> field.label
     end
   end
+
+  defp ensure_existing_contact_rows(suggestions, nil, _mapping_fields), do: suggestions
+
+  defp ensure_existing_contact_rows(suggestions, selected_contact, mapping_fields) do
+    existing_fields = suggestions |> Enum.map(& &1.mapped_field) |> MapSet.new()
+
+    additional_rows =
+      mapping_fields
+      |> Enum.reduce([], fn mapping_field, acc ->
+        mapped_field =
+          mapping_field
+          |> Map.get(:name, Map.get(mapping_field, "name"))
+          |> Suggestions.normalize_field_key()
+
+        mapped_label =
+          Map.get(mapping_field, :label, Map.get(mapping_field, "label", mapped_field))
+
+        cond do
+          not is_binary(mapped_field) ->
+            acc
+
+          MapSet.member?(existing_fields, mapped_field) ->
+            acc
+
+          true ->
+            current_value =
+              selected_contact
+              |> Suggestions.contact_field_value(mapped_field)
+              |> then(&Suggestions.normalize_field_value(mapped_field, &1))
+              |> then(&SuggestionsHelpers.sanitize_suggestion_value(mapped_field, mapped_label, &1))
+
+            if present_existing_value?(current_value) do
+              [
+                %{
+                  id: "hubspot-existing-#{mapped_field}",
+                  field: mapped_field,
+                  mapped_field: mapped_field,
+                  label: mapped_label,
+                  mapped_label: mapped_label,
+                  current_value: current_value,
+                  new_value: current_value,
+                  context: nil,
+                  timestamp: nil,
+                  apply: false,
+                  details_open: false,
+                  mapping_open: false,
+                  has_change: false
+                }
+                | acc
+              ]
+            else
+              acc
+            end
+        end
+      end)
+      |> Enum.reverse()
+
+    suggestions ++ additional_rows
+  end
+
+  defp present_existing_value?(nil), do: false
+  defp present_existing_value?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present_existing_value?(_), do: true
 
   defp api_impl do
     Application.get_env(:social_scribe, :hubspot_api, Api)

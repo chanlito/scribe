@@ -79,6 +79,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           patch={@patch}
           mapping_fields={@mapping_fields}
           form_error={@form_error}
+          notice={@notice}
           provider_name={@provider_name}
           provider_button_class={@provider_button_class}
           capabilities={@capabilities}
@@ -95,6 +96,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   attr :patch, :string, required: true
   attr :mapping_fields, :list, required: true
   attr :form_error, :string, default: nil
+  attr :notice, :atom, default: nil
   attr :provider_name, :string, required: true
   attr :provider_button_class, :string, required: true
   attr :capabilities, :map, required: true
@@ -102,6 +104,9 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   defp suggestions_section(assigns) do
     selected_count = Enum.count(assigns.suggestions, &(&1.apply == true))
     field_label = if selected_count == 1, do: "field", else: "fields"
+
+    ai_suggestions = Enum.reject(assigns.suggestions, &existing_row?/1)
+    existing_rows = Enum.filter(assigns.suggestions, &existing_row?/1)
 
     assigns =
       assigns
@@ -111,6 +116,9 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
         "1 contact, #{selected_count} #{field_label} selected for update"
       )
       |> assign(:show_generation_loading, assigns.loading && Enum.empty?(assigns.suggestions))
+      |> assign(:ai_suggestions, ai_suggestions)
+      |> assign(:existing_rows, existing_rows)
+      |> assign(:existing_section_id, "existing-rows-#{assigns.myself.cid}")
 
     ~H"""
     <div class="space-y-4">
@@ -125,18 +133,44 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           <p>Generating suggestions...</p>
         </div>
       <% else %>
-        <%= if Enum.empty?(@suggestions) do %>
-          <.empty_state
-            message="No update suggestions found from this meeting."
-            submessage="The AI didn't detect any new contact information in the transcript."
-          />
-        <% else %>
-          <form phx-submit="apply_updates" phx-change="toggle_suggestion" phx-target={@myself}>
-            <.inline_error :if={@form_error} message={@form_error} class="mb-2" />
+        <form phx-submit="apply_updates" phx-change="toggle_suggestion" phx-target={@myself}>
+          <.inline_error :if={@form_error} message={@form_error} class="mb-2" />
 
-            <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+          <.suggestion_notice :if={@notice} notice={@notice} provider_name={@provider_name} />
+
+          <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+            <.crm_suggestion_card
+              :for={suggestion <- @ai_suggestions}
+              suggestion={suggestion}
+              mapping_fields={@mapping_fields}
+              myself={@myself}
+              capabilities={@capabilities}
+              provider_name={@provider_name}
+            />
+          </div>
+
+          <div :if={@existing_rows != []}>
+            <div class="flex justify-center my-2">
+              <button
+                type="button"
+                phx-click={
+                  JS.toggle(to: "##{@existing_section_id}")
+                  |> JS.toggle(to: "##{@existing_section_id}-show-label")
+                  |> JS.toggle(to: "##{@existing_section_id}-hide-label")
+                }
+                class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 rounded"
+              >
+                <span id={"#{@existing_section_id}-show-label"}>Show existing fields</span>
+                <span id={"#{@existing_section_id}-hide-label"} class="hidden">
+                  Hide existing fields
+                </span>
+                <.icon name="hero-chevron-down" class="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div id={@existing_section_id} class="hidden mt-2 space-y-4 max-h-[40vh] overflow-y-auto pr-2">
               <.crm_suggestion_card
-                :for={suggestion <- @suggestions}
+                :for={suggestion <- @existing_rows}
                 suggestion={suggestion}
                 mapping_fields={@mapping_fields}
                 myself={@myself}
@@ -144,22 +178,52 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
                 provider_name={@provider_name}
               />
             </div>
+          </div>
 
-            <.modal_footer
-              cancel_patch={if @updating, do: nil, else: @patch}
-              submit_text={"Update #{@provider_name}"}
-              submit_class={@provider_button_class}
-              disabled={@selected_count == 0}
-              loading={@updating}
-              loading_text="Updating..."
-              info_text={@selected_updates_summary}
-            />
-          </form>
-        <% end %>
+          <.modal_footer
+            cancel_patch={if @updating, do: nil, else: @patch}
+            submit_text={"Update #{@provider_name}"}
+            submit_class={@provider_button_class}
+            disabled={@selected_count == 0}
+            loading={@updating}
+            loading_text="Updating..."
+            info_text={@selected_updates_summary}
+          />
+        </form>
       <% end %>
     </div>
     """
   end
+
+  defp existing_row?(%{id: id}) when is_binary(id), do: String.contains?(id, "-existing-")
+  defp existing_row?(_), do: false
+
+  attr :notice, :atom, required: true
+  attr :provider_name, :string, required: true
+
+  defp suggestion_notice(%{notice: :no_ai_suggestions} = assigns) do
+    ~H"""
+    <div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-2">
+      <p class="text-sm font-medium text-slate-700">Nothing to suggest</p>
+      <p class="text-sm text-slate-500 mt-0.5">
+        The AI reviewed the transcript but couldn't find any new contact information. You can still manually update any field below.
+      </p>
+    </div>
+    """
+  end
+
+  defp suggestion_notice(%{notice: :all_up_to_date} = assigns) do
+    ~H"""
+    <div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-2">
+      <p class="text-sm font-medium text-slate-700">All fields are up to date</p>
+      <p class="text-sm text-slate-500 mt-0.5">
+        The AI found some information, but it already matches what's in {@provider_name}. You can still manually update any field below.
+      </p>
+    </div>
+    """
+  end
+
+  defp suggestion_notice(assigns), do: ~H""
 
   attr :suggestion, :map, required: true
   attr :mapping_fields, :list, required: true
@@ -171,10 +235,21 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
     mapping_toggle? = Map.get(assigns.capabilities, :mapping_toggle, false)
     details_toggle? = Map.get(assigns.capabilities, :details_toggle, false)
 
+    field_meta =
+      Enum.find(assigns.mapping_fields, fn f ->
+        f.name == assigns.suggestion.mapped_field
+      end)
+
+    field_type = if field_meta, do: Map.get(field_meta, :type), else: nil
+    field_options = if field_meta, do: Map.get(field_meta, :options, []), else: []
+    field_type_label = field_type_label(field_type)
+
     assigns =
       assigns
       |> assign(:mapping_toggle, mapping_toggle?)
       |> assign(:details_toggle, details_toggle?)
+      |> assign(:field_type_label, field_type_label)
+      |> assign(:field_options, field_options)
       |> assign(:details_id, "suggestion-details-#{assigns.suggestion.id}")
       |> assign(:current_value_id, "suggestion-current-value-#{assigns.suggestion.id}")
       |> assign(:new_value_id, "suggestion-new-value-#{assigns.suggestion.id}")
@@ -203,7 +278,14 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
               class="h-5 w-5 rounded-[3px] border-slate-300 text-hubspot-checkbox accent-hubspot-checkbox focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 cursor-pointer"
             />
           </label>
-          <div class="text-sm font-semibold text-slate-900 leading-5">{@suggestion.mapped_label}</div>
+          <div>
+            <div class="text-sm font-semibold text-slate-900 leading-5">
+              {@suggestion.mapped_label}
+            </div>
+            <div :if={@field_type_label} class="text-xs text-slate-400 mt-0.5">
+              {@field_type_label}
+            </div>
+          </div>
         </div>
 
         <div class="flex items-center gap-3">
@@ -256,15 +338,33 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
               <.icon name="hero-arrow-long-right" class="h-7 w-7" />
             </div>
 
-            <input
-              id={@new_value_id}
-              type="text"
-              name={"values[#{@suggestion.id}]"}
-              value={@suggestion.new_value}
-              phx-debounce="300"
-              aria-label={@new_value_label}
-              class="block w-full shadow-sm text-sm text-slate-900 bg-white border border-hubspot-input rounded-[7px] py-2 px-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
+            <%= if Enum.any?(@field_options) do %>
+              <select
+                id={@new_value_id}
+                name={"values[#{@suggestion.id}]"}
+                aria-label={@new_value_label}
+                class="block w-full shadow-sm text-sm text-slate-900 bg-white border border-hubspot-input rounded-[7px] py-2 px-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">— select —</option>
+                <option
+                  :for={opt <- @field_options}
+                  value={opt.value}
+                  selected={opt.value == @suggestion.new_value}
+                >
+                  {opt.label}
+                </option>
+              </select>
+            <% else %>
+              <input
+                id={@new_value_id}
+                type="text"
+                name={"values[#{@suggestion.id}]"}
+                value={@suggestion.new_value}
+                phx-debounce="300"
+                aria-label={@new_value_label}
+                class="block w-full shadow-sm text-sm text-slate-900 bg-white border border-hubspot-input rounded-[7px] py-2 px-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            <% end %>
           </div>
         </div>
 
@@ -301,7 +401,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
                   value={field.name}
                   selected={field.name == @suggestion.mapped_field}
                 >
-                  {field.label}
+                  {mapping_field_option_label(field)}
                 </option>
               </select>
             </div>
@@ -311,7 +411,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
           <span
             :if={@suggestion[:timestamp]}
-            class="text-xs text-slate-500 justify-self-start sm:text-right"
+            class="text-xs text-slate-500 justify-self-end text-right"
           >
             Found in transcript<span
               class="text-hubspot-link hover:underline cursor-help"
@@ -355,6 +455,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
       |> assign_new(:next_cursor, fn -> nil end)
       |> assign_new(:selected_contact, fn -> nil end)
       |> assign_new(:suggestions, fn -> [] end)
+      |> assign_new(:notice, fn -> nil end)
       |> assign_new(:loading, fn -> false end)
       |> assign_new(:updating, fn -> false end)
       |> assign_new(:searching, fn -> false end)
@@ -399,6 +500,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
      |> assign(:next_cursor, nil)
      |> assign(:query, "")
      |> assign(:suggestions, [])
+     |> assign(:notice, nil)
      |> assign(:mapping_fields, socket.assigns.provider.default_mapping_fields())
      |> assign(:dropdown_open, false)
      |> assign(:loading, false)
@@ -511,6 +613,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
      assign(socket,
        selected_contact: nil,
        suggestions: [],
+       notice: nil,
        mapping_fields: socket.assigns.provider.default_mapping_fields(),
        form_error: nil,
        loading: false,
@@ -644,4 +747,31 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
     next_cursor = if next_offset < length(contacts), do: Integer.to_string(next_offset), else: nil
     {page, next_cursor}
   end
+
+  # Maps a CRM field type to a user-friendly display label.
+  # Returns nil for plain text types to avoid noisy subtitles on simple fields.
+  defp field_type_label(type) when is_binary(type) do
+    case type do
+      t when t in ["text", "string", "textarea", "phone_number"] -> nil
+      "select" -> "Picklist"
+      "radio" -> "Picklist"
+      "picklist" -> "Picklist"
+      "date" -> "Date"
+      "datetime" -> "Date & Time"
+      "number" -> "Number"
+      "currency" -> "Currency"
+      "percent" -> "Percentage"
+      "boolean" -> "Yes / No"
+      "checkbox" -> "Yes / No"
+      "phone" -> "Phone"
+      "url" -> "URL"
+      "email" -> "Email"
+      other -> String.capitalize(other)
+    end
+  end
+
+  defp field_type_label(_), do: nil
+
+  defp mapping_field_option_label(%{label: label}), do: label
+  defp mapping_field_option_label(_), do: ""
 end

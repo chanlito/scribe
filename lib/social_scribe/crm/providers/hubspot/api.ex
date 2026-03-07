@@ -5,6 +5,7 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Api do
   """
 
   @behaviour SocialScribe.CRM.ApiBehaviour
+  @behaviour SocialScribe.CRM.DescribeFieldsBehaviour
 
   alias SocialScribe.Accounts.UserCredential
   alias SocialScribe.HubspotTokenRefresher
@@ -122,6 +123,26 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Api do
   end
 
   @doc """
+  Fetches the full list of contact properties from HubSpot, including
+  field type and picklist options. Used to build dynamic mapping_fields.
+  """
+  def describe_contact_fields(%UserCredential{} = credential) do
+    with_token_refresh(credential, fn cred ->
+      case Tesla.get(client(cred.token), "/crm/v3/properties/contacts") do
+        {:ok, %Tesla.Env{status: 200, body: %{"results" => results}}} ->
+          fields = Enum.map(results, &format_property/1)
+          {:ok, fields}
+
+        {:ok, %Tesla.Env{status: status, body: body}} ->
+          {:error, {:api_error, status, body}}
+
+        {:error, reason} ->
+          {:error, {:http_error, reason}}
+      end
+    end)
+  end
+
+  @doc """
   Batch updates multiple properties on a contact.
   This is a convenience wrapper around update_contact/3.
   """
@@ -140,6 +161,32 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Api do
       {:ok, :no_updates}
     end
   end
+
+  defp format_property(%{"name" => name} = property) do
+    label = Map.get(property, "label", name)
+    field_type = Map.get(property, "fieldType", "text")
+    options = format_property_options(Map.get(property, "options", []))
+    %{name: name, label: label, type: field_type, options: options}
+  end
+
+  defp format_property(property) do
+    name = Map.get(property, "name", "")
+    %{name: name, label: name, type: "text", options: []}
+  end
+
+  defp format_property_options(options) when is_list(options) do
+    options
+    |> Enum.reject(fn opt -> Map.get(opt, "hidden", false) == true end)
+    |> Enum.map(fn opt ->
+      value = Map.get(opt, "value", "")
+      label = Map.get(opt, "label", value)
+      %{label: label, value: value}
+    end)
+    |> Enum.reject(fn %{value: v} -> v == "" end)
+    |> Enum.uniq_by(& &1.value)
+  end
+
+  defp format_property_options(_), do: []
 
   # Format a HubSpot contact response into a cleaner structure
   defp format_contact(%{"id" => id, "properties" => properties}) do

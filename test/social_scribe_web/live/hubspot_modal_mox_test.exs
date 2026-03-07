@@ -111,6 +111,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
       |> expect(:search_contacts, fn _credential, _query ->
         {:ok, [mock_contact]}
       end)
+      |> expect(:describe_contact_fields, fn _credential -> {:ok, []} end)
 
       # Also need to mock the AI content generator for suggestions
       SocialScribe.AIContentGeneratorMock
@@ -186,6 +187,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
 
       SocialScribe.HubspotApiMock
       |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+      |> expect(:describe_contact_fields, fn _credential -> {:ok, []} end)
 
       SocialScribe.AIContentGeneratorMock
       |> expect(:generate_hubspot_suggestions, fn _meeting ->
@@ -221,7 +223,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
       assert has_element?(view, "input[name^='values[']")
 
       view
-      |> element("button[phx-click='toggle_suggestion_details']")
+      |> element("button[phx-click='toggle_suggestion_details'][aria-label='Hide details']")
       |> render_click()
 
       refute has_element?(view, "input[name^='values[']")
@@ -248,7 +250,8 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
 
       SocialScribe.HubspotApiMock
       |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
-      |> expect(:update_contact, fn _credential, "123", %{"phone" => "555-1234"} ->
+      |> expect(:describe_contact_fields, fn _credential -> {:ok, []} end)
+      |> expect(:update_contact, fn _credential, "123", _updates ->
         :timer.sleep(250)
         {:error, {:api_error, 500, %{"message" => "boom"}}}
       end)
@@ -294,7 +297,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
       unlocked_html = render(view)
       assert has_element?(view, "button[type='submit']", "Update HubSpot")
       assert has_element?(view, "button", "Cancel")
-      assert unlocked_html =~ "Failed to update contact"
+      assert unlocked_html =~ "HubSpot API error"
       assert has_element?(view, "#hubspot-modal-wrapper")
     end
 
@@ -303,8 +306,10 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
 
       assert capabilities.details_toggle
       assert capabilities.lock_on_submit
-      refute capabilities.mapping_toggle
+      assert capabilities.mapping_toggle
+      assert capabilities.mapping
       refute capabilities.paired_fields
+      refute capabilities.account_selection
     end
   end
 

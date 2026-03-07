@@ -67,7 +67,11 @@ defmodule SocialScribe.HubspotSuggestionsTest do
       assert hd(suggestions).context == "Please update my first name to Tyler"
     end
 
-    test "resolves timestamp from transcript context near AI timestamp" do
+    test "resolves timestamp to the latest transcript occurrence regardless of AI hint" do
+      # The AI hint ("00:05") is intentionally ignored when a transcript match
+      # exists — LLMs often return the same imprecise timestamp for every
+      # suggestion, which would anchor everything to one point. Using the latest
+      # occurrence instead gives each field a more meaningful timestamp.
       meeting = %{
         meeting_transcript: %{
           content: %{
@@ -109,7 +113,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
       end)
 
       assert {:ok, [suggestion]} = Suggestions.generate_suggestions_from_meeting(meeting)
-      assert suggestion.timestamp == "00:27"
+      assert suggestion.timestamp == "01:19"
     end
 
     test "prefers latest matching timestamp when AI timestamp is missing" do
@@ -258,6 +262,89 @@ defmodule SocialScribe.HubspotSuggestionsTest do
 
       assert by_field["email"].timestamp == "00:27"
       assert by_field["phone"].timestamp == "00:41"
+    end
+
+    test "all suggestions correctly show the same timestamp when all values are mentioned at the same transcript point" do
+      # Explains the "all 00:10" display: if all contact info was genuinely
+      # mentioned in one sentence at the same second, every suggestion correctly
+      # resolves to the same time. Latest-occurrence strategy picks 10s for all.
+      meeting = %{
+        meeting_transcript: %{
+          content: %{
+            "data" => [
+              %{
+                "words" => [
+                  %{"text" => "Harris", "start_timestamp" => 10.0},
+                  %{"text" => "California", "start_timestamp" => 10.0},
+                  %{"text" => "tyler.harris@gmail.com", "start_timestamp" => 10.0},
+                  %{"text" => "5557123330", "start_timestamp" => 10.0}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_hubspot_suggestions, fn _meeting ->
+        {:ok,
+         [
+           %{field: "lastname", value: "Harris", context: "last name Harris", timestamp: "00:10"},
+           %{field: "state", value: "California", context: "from California", timestamp: "00:10"},
+           %{field: "email", value: "tyler.harris@gmail.com", context: "email", timestamp: "00:10"},
+           %{field: "phone", value: "5557123330", context: "phone", timestamp: "00:10"}
+         ]}
+      end)
+
+      assert {:ok, suggestions} = Suggestions.generate_suggestions_from_meeting(meeting)
+      by_field = Map.new(suggestions, &{&1.field, &1})
+
+      assert by_field["lastname"].timestamp == "00:10"
+      assert by_field["state"].timestamp == "00:10"
+      assert by_field["email"].timestamp == "00:10"
+      assert by_field["phone"].timestamp == "00:10"
+    end
+
+    test "all suggestions show the same AI timestamp when transcript has no timing data" do
+      # Explains the "all 00:10" display: when the meeting recording carries no
+      # word-level timing, every suggestion falls back to whatever timestamp the
+      # AI provided — which may be the same value for all fields.
+      meeting = %{
+        meeting_transcript: %{
+          content: %{
+            "data" => [
+              %{
+                "words" => [
+                  %{"text" => "Harris"},
+                  %{"text" => "California"},
+                  %{"text" => "tyler.harris@gmail.com"},
+                  %{"text" => "5557123330"}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_hubspot_suggestions, fn _meeting ->
+        {:ok,
+         [
+           %{field: "lastname", value: "Harris", context: "last name Harris", timestamp: "00:10"},
+           %{field: "state", value: "California", context: "from California", timestamp: "00:10"},
+           %{field: "email", value: "tyler.harris@gmail.com", context: "email", timestamp: "00:10"},
+           %{field: "phone", value: "5557123330", context: "phone", timestamp: "00:10"}
+         ]}
+      end)
+
+      assert {:ok, suggestions} = Suggestions.generate_suggestions_from_meeting(meeting)
+      by_field = Map.new(suggestions, &{&1.field, &1})
+
+      # All fall back to the AI timestamp since no timing data exists
+      assert by_field["lastname"].timestamp == "00:10"
+      assert by_field["state"].timestamp == "00:10"
+      assert by_field["email"].timestamp == "00:10"
+      assert by_field["phone"].timestamp == "00:10"
     end
 
     test "resolves timestamps when transcript timing is encoded as strings" do

@@ -145,7 +145,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       result = Suggestions.merge_with_contact(suggestions, contact)
 
       assert length(result) == 1
-      assert hd(result).current_value == "$50,000.00"
+      assert hd(result).current_value == "50000.00"
       assert hd(result).has_change == true
     end
 
@@ -386,8 +386,8 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
                Suggestions.generate_suggestions(credential, "003123", meeting)
 
       assert Enum.find(mapping_fields, &(&1.name == "mailingcountry")).options == [
-               "United States",
-               "Canada"
+               %{label: "United States", value: "United States"},
+               %{label: "Canada", value: "Canada"}
              ]
     end
 

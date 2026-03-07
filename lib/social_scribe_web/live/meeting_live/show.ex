@@ -146,12 +146,14 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   def handle_info({:crm_generate_suggestions, provider, contact, meeting, credential}, socket) do
     case provider.generate_suggestions(credential, contact, meeting) do
       {:ok,
-       %{selected_contact: full_contact, suggestions: suggestions, mapping_fields: mapping_fields}} ->
+       %{selected_contact: full_contact, suggestions: suggestions, mapping_fields: mapping_fields} =
+           result} ->
         send_update(CrmModalComponent,
           id: modal_component_id(provider),
           selected_contact: full_contact,
           suggestions: suggestions,
           mapping_fields: mapping_fields,
+          notice: Map.get(result, :notice),
           form_error: nil,
           loading: false
         )

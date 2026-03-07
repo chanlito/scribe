@@ -35,9 +35,31 @@ defmodule SocialScribe.CRM.SuggestionsHelpers do
   end
 
   def normalize_for_display(value) when is_integer(value), do: Integer.to_string(value)
-  def normalize_for_display(value) when is_binary(value), do: String.trim(value)
+  def normalize_for_display(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> strip_numeric_symbols()
+  end
   def normalize_for_display(value) when is_boolean(value), do: to_string(value)
   def normalize_for_display(value), do: inspect(value)
+
+  # Strips leading currency symbols ($ € £ ¥) and trailing % sign, plus thousands
+  # separators, when the remainder parses as a plain number. Non-numeric strings
+  # are returned unchanged so names/emails/etc. are never modified.
+  defp strip_numeric_symbols(value) when is_binary(value) do
+    stripped =
+      value
+      |> String.replace(~r/^[$€£¥]/, "")
+      |> String.replace(~r/%$/, "")
+      |> String.replace(",", "")
+      |> String.trim()
+
+    if Regex.match?(~r/^\-?\d+(\.\d+)?$/, stripped) do
+      stripped
+    else
+      value
+    end
+  end
 
   def normalize_for_compare(nil), do: nil
 
@@ -293,12 +315,13 @@ defmodule SocialScribe.CRM.SuggestionsHelpers do
   # Strategy:
   # 1. Collect ALL matching timestamps from phrase and segment lookups (ignoring
   #    0-second results, which indicate a word was found but carries no timing data).
-  # 2. If matches exist and the AI provided a timestamp hint, pick the occurrence
-  #    nearest to it.
-  # 3. If matches exist and the AI has no timestamp, pick the latest occurrence.
-  # 4. If no matches exist but the transcript has timing data, return nil (don't
+  # 2. If matches exist, pick the latest occurrence. The AI hint is intentionally
+  #    ignored here: LLMs frequently return the same imprecise timestamp for every
+  #    suggestion (e.g. "00:10"), which anchors all results to a single point when
+  #    using a nearest-match strategy.
+  # 3. If no matches exist but the transcript has timing data, return nil (don't
   #    trust AI timestamp).
-  # 5. If the transcript has no timing data at all, fall back to the AI-provided
+  # 4. If the transcript has no timing data at all, fall back to the AI-provided
   #    timestamp.
   def resolve_timestamp(ai_timestamp, context, value, transcript_index) do
     context_query = normalize_text(context)
@@ -321,13 +344,7 @@ defmodule SocialScribe.CRM.SuggestionsHelpers do
           else: normalize_timestamp(ai_timestamp)
 
       seconds_list ->
-        best =
-          case parse_ai_timestamp_seconds(ai_timestamp) do
-            nil -> Enum.max(seconds_list)
-            ai_s -> Enum.min_by(seconds_list, fn s -> abs(s - ai_s) end)
-          end
-
-        format_mmss(best)
+        format_mmss(Enum.max(seconds_list))
     end
   end
 
@@ -492,6 +509,51 @@ defmodule SocialScribe.CRM.SuggestionsHelpers do
       {:ok, String.to_existing_atom(key)}
     rescue
       ArgumentError -> :error
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Shared suggestion helpers used by multiple providers
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Strips a suggestion value that looks like an internal field identifier
+  (i.e. the AI returned the field name as the value instead of a real value).
+  Returns nil for identifier-like values, the value unchanged otherwise.
+  """
+  def sanitize_suggestion_value(field, label, value) when is_binary(value) do
+    if identifier_like_value?(field, label, value), do: nil, else: value
+  end
+
+  def sanitize_suggestion_value(_field, _label, value), do: value
+
+  @doc """
+  Validates that no two selected suggestions are mapped to the same target field.
+  Returns `{suggestions, nil}` when valid, or `{suggestions, error_message}` when
+  duplicate field mappings are detected.
+  """
+  def apply_duplicate_validation(suggestions) do
+    selected = Enum.filter(suggestions, &(&1.apply == true))
+
+    duplicates =
+      selected
+      |> Enum.group_by(& &1.mapped_field)
+      |> Enum.filter(fn {_field, rows} -> length(rows) > 1 end)
+
+    case duplicates do
+      [] ->
+        {suggestions, nil}
+
+      duplicate_groups ->
+        duplicate_fields =
+          duplicate_groups
+          |> Enum.map(fn {_field, [first | _]} ->
+            Map.get(first, :mapped_label, "Unknown field")
+          end)
+          |> Enum.join(", ")
+
+        {suggestions,
+         "Each field can only be updated once per submit. Duplicate mappings: #{duplicate_fields}"}
     end
   end
 end

@@ -299,6 +299,7 @@ This line is already present; no change needed unless you store classes in a dif
 * **Error Handling & UI Polish:** While core paths are robustly handled, comprehensive error feedback for all API edge cases and advanced UI polish are areas for continued development beyond the initial 48-hour scope.
 * **Prompt Templating for Automations:** The current automation prompt templating is basic (string replacement). A more sophisticated templating engine (e.g., EEx or a dedicated library) would be a future improvement.
 * **Agenda Integration:** Currently we only sync when the calendar event has a `hangoutLink` or `location` field with a zoom or google meet link.
+* **CRM Transcript Timestamps — "all same time":** The AI (Gemini) frequently returns the same imprecise timestamp (e.g. `"00:10"`) for every extracted field. `SuggestionsHelpers.resolve_timestamp` intentionally ignores the AI hint when a transcript match exists and always picks the **latest** occurrence of the value in the transcript — the same strategy used by the Salesforce provider. Do **not** revert to a "nearest-to-AI-hint" (`Enum.min_by`) strategy; that caused every suggestion to anchor to the same early timestamp. See `lib/social_scribe/crm/suggestions_helpers.ex` and the tests in `test/social_scribe/hubspot_suggestions_test.exs` (`"resolves timestamp to the latest transcript occurrence regardless of AI hint"`).
 ---
 
 ## 📚 Learn More (Phoenix Framework)
