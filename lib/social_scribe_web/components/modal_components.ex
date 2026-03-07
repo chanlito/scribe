@@ -634,6 +634,18 @@ defmodule SocialScribeWeb.ModalComponents do
     """
   end
 
+  @doc """
+  Renders a Salesforce-styled modal wrapper.
+  """
+  attr :id, :string, required: true
+  attr :show, :boolean, default: false
+  attr :on_cancel, JS, default: %JS{}
+  slot :inner_block, required: true
+
+  def salesforce_modal(assigns) do
+    hubspot_modal(assigns)
+  end
+
   defp show_modal(js \\ %JS{}, id) when is_binary(id) do
     js
     |> JS.show(to: "##{id}")

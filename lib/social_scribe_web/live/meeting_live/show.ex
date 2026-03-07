@@ -3,13 +3,15 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   import SocialScribeWeb.PlatformLogo
   import SocialScribeWeb.ClipboardButton
-  import SocialScribeWeb.ModalComponents, only: [hubspot_modal: 1]
+  import SocialScribeWeb.ModalComponents, only: [hubspot_modal: 1, salesforce_modal: 1]
 
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
   alias SocialScribe.Accounts
   alias SocialScribe.HubspotApiBehaviour, as: HubspotApi
   alias SocialScribe.HubspotSuggestions
+  alias SocialScribe.SalesforceApiBehaviour, as: SalesforceApi
+  alias SocialScribe.SalesforceSuggestions
 
   @impl true
   def mount(%{"id" => meeting_id}, _session, socket) do
@@ -32,6 +34,9 @@ defmodule SocialScribeWeb.MeetingLive.Show do
     else
       hubspot_credential = Accounts.get_user_hubspot_credential(socket.assigns.current_user.id)
 
+      salesforce_credentials =
+        Accounts.list_user_credentials(socket.assigns.current_user, provider: "salesforce")
+
       socket =
         socket
         |> assign(:page_title, "Meeting Details: #{meeting.title}")
@@ -39,6 +44,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         |> assign(:automation_results, automation_results)
         |> assign(:user_has_automations, user_has_automations)
         |> assign(:hubspot_credential, hubspot_credential)
+        |> assign(:salesforce_credentials, salesforce_credentials)
         |> assign(
           :follow_up_email_form,
           to_form(%{
@@ -144,10 +150,173 @@ defmodule SocialScribeWeb.MeetingLive.Show do
     end
   end
 
+  @impl true
+  def handle_info({:salesforce_search, query, credential}, socket) do
+    case SalesforceApi.search_contacts(credential, query) do
+      {:ok, contacts} ->
+        send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
+          id: "salesforce-modal",
+          contacts: contacts,
+          searching: false
+        )
+
+      {:error, reason} ->
+        send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
+          id: "salesforce-modal",
+          error: format_salesforce_search_error(reason),
+          searching: false
+        )
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:generate_salesforce_suggestions, contact, meeting, credential}, socket) do
+    case SalesforceSuggestions.generate_suggestions(credential, contact.id, meeting) do
+      {:ok, %{suggestions: suggestions, mapping_fields: mapping_fields}} ->
+        send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
+          id: "salesforce-modal",
+          step: :suggestions,
+          suggestions: suggestions,
+          mapping_fields: mapping_fields,
+          form_error: nil,
+          loading: false
+        )
+
+      {:error, reason} ->
+        send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
+          id: "salesforce-modal",
+          error: format_suggestion_generation_error(reason),
+          loading: false
+        )
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:apply_salesforce_updates, updates, contact, credential}, socket) do
+    case SalesforceApi.update_contact(credential, contact.id, updates) do
+      {:ok, _updated_contact} ->
+        socket =
+          socket
+          |> put_flash(:info, "Successfully updated #{map_size(updates)} field(s) in Salesforce")
+          |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
+          id: "salesforce-modal",
+          error: format_salesforce_update_error(reason),
+          loading: false
+        )
+
+        {:noreply, socket}
+    end
+  end
+
   defp normalize_contact(contact) do
     # Contact is already formatted with atom keys from HubspotApi.format_contact
     contact
   end
+
+  defp format_suggestion_generation_error({:api_error, 429, body}) do
+    retry_seconds = extract_retry_seconds(body)
+
+    retry_hint =
+      if retry_seconds do
+        " Please retry in about #{retry_seconds} seconds."
+      else
+        " Please retry shortly."
+      end
+
+    "AI suggestion generation is rate-limited by Gemini quota." <>
+      retry_hint <>
+      " If this persists, check Gemini API quota/billing settings."
+  end
+
+  defp format_suggestion_generation_error({:config_error, message}) when is_binary(message) do
+    "AI suggestion generation is unavailable: #{message}"
+  end
+
+  defp format_suggestion_generation_error(reason) do
+    "Failed to generate suggestions: #{inspect(reason)}"
+  end
+
+  defp format_salesforce_update_error({:invalid_updates, errors}) when is_list(errors) do
+    details =
+      errors
+      |> Enum.map(fn error ->
+        field = Map.get(error, :field, "unknown field")
+        message = Map.get(error, :message, "invalid value")
+        "#{field}: #{message}"
+      end)
+      |> Enum.join("; ")
+
+    "Some values could not be validated for Salesforce: #{details}"
+  end
+
+  defp format_salesforce_update_error({:api_error, 400, body}) when is_list(body) do
+    details =
+      body
+      |> Enum.map(fn entry ->
+        code = Map.get(entry, "errorCode", "UNKNOWN")
+        message = Map.get(entry, "message", "Unknown Salesforce error")
+        "#{code}: #{message}"
+      end)
+      |> Enum.join("; ")
+
+    "Salesforce rejected the update: #{details}"
+  end
+
+  defp format_salesforce_update_error(reason) do
+    "Failed to update contact: #{inspect(reason)}"
+  end
+
+  defp format_salesforce_search_error({:reconnect_required, message}) when is_binary(message) do
+    message
+  end
+
+  defp format_salesforce_search_error(reason) do
+    "Failed to search contacts: #{inspect(reason)}"
+  end
+
+  defp extract_retry_seconds(%{"error" => %{"details" => details}}) when is_list(details) do
+    details
+    |> Enum.find_value(fn detail ->
+      case detail do
+        %{
+          "@type" => "type.googleapis.com/google.rpc.RetryInfo",
+          "retryDelay" => retry_delay
+        } ->
+          parse_retry_delay_seconds(retry_delay)
+
+        _ ->
+          nil
+      end
+    end)
+  end
+
+  defp extract_retry_seconds(_), do: nil
+
+  defp parse_retry_delay_seconds(retry_delay) when is_binary(retry_delay) do
+    case Regex.run(~r/^(\d+(?:\.\d+)?)s$/, retry_delay, capture: :all_but_first) do
+      [seconds] ->
+        seconds
+        |> Float.parse()
+        |> case do
+          {value, _} -> trunc(Float.ceil(value))
+          :error -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_retry_delay_seconds(_), do: nil
 
   defp format_duration(nil), do: "N/A"
 
@@ -164,6 +333,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   end
 
   attr :meeting_transcript, :map, required: true
+  attr :meeting_participants, :list, default: []
 
   defp transcript_content(assigns) do
     has_transcript =
@@ -186,9 +356,13 @@ defmodule SocialScribeWeb.MeetingLive.Show do
           <div :for={segment <- @meeting_transcript.content["data"]} class="mb-3">
             <p>
               <span class="font-semibold text-indigo-600">
-                {segment["speaker"] || "Unknown Speaker"}:
+                {Meetings.resolve_transcript_speaker(segment, @meeting_participants)}:
               </span>
-              {Enum.map_join(segment["words"] || [], " ", & &1["text"])}
+              {Enum.map_join(
+                Meetings.transcript_segment_words(segment),
+                " ",
+                &Meetings.transcript_word_text/1
+              )}
             </p>
           </div>
         <% else %>

@@ -317,6 +317,23 @@ defmodule SocialScribe.MeetingsTest do
   end
 
   describe "generate_prompt_for_meeting/1" do
+    test "resolve_transcript_speaker/2 supports atom-keyed segments" do
+      participants = [
+        %MeetingParticipant{name: "Resolved Participant", recall_participant_id: "100"}
+      ]
+
+      assert Meetings.resolve_transcript_speaker(%{speaker: "Atom Speaker"}, participants) ==
+               "Atom Speaker"
+
+      assert Meetings.resolve_transcript_speaker(%{speaker_id: 100}, participants) ==
+               "Resolved Participant"
+
+      assert Meetings.resolve_transcript_speaker(
+               %{participant: %{name: "Nested Participant"}},
+               participants
+             ) == "Nested Participant"
+    end
+
     test "generates a prompt for a meeting" do
       meeting = meeting_fixture()
 
@@ -344,6 +361,66 @@ defmodule SocialScribe.MeetingsTest do
 
              ### Transcript:
              """
+    end
+
+    test "generates a prompt with speaker names resolved from participant ids" do
+      meeting = meeting_fixture()
+
+      meeting_transcript_fixture(%{
+        meeting_id: meeting.id,
+        content: %{
+          "data" => [
+            %{
+              "speaker_id" => 42,
+              "words" => [
+                %{"text" => "Hello", "start_timestamp" => 65.0},
+                %{"text" => "there"}
+              ]
+            }
+          ]
+        }
+      })
+
+      meeting_participant_fixture(%{
+        meeting_id: meeting.id,
+        name: "Resolved Speaker",
+        recall_participant_id: "42",
+        is_host: true
+      })
+
+      meeting = Meetings.get_meeting_with_details(meeting.id)
+
+      {:ok, prompt} = Meetings.generate_prompt_for_meeting(meeting)
+
+      assert prompt =~ "[01:05] Resolved Speaker: Hello there"
+    end
+
+    test "generates transcript timestamps from atom-keyed transcript content" do
+      meeting = meeting_fixture()
+
+      meeting_transcript_fixture(%{
+        meeting_id: meeting.id,
+        content: %{
+          data: [
+            %{
+              speaker: "Atom Speaker",
+              words: [
+                %{text: "Call", start_timestamp: 79.0},
+                %{text: "me"},
+                %{text: "Tyler"}
+              ]
+            }
+          ]
+        }
+      })
+
+      meeting_participant_fixture(%{meeting_id: meeting.id, name: "Host User", is_host: true})
+
+      meeting = Meetings.get_meeting_with_details(meeting.id)
+
+      {:ok, prompt} = Meetings.generate_prompt_for_meeting(meeting)
+
+      assert prompt =~ "[01:19] Atom Speaker: Call me Tyler"
     end
   end
 end

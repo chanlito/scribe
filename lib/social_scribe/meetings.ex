@@ -13,6 +13,8 @@ defmodule SocialScribe.Meetings do
 
   require Logger
 
+  @unknown_speaker "Unknown Speaker"
+
   @doc """
   Returns the list of meetings.
 
@@ -147,7 +149,43 @@ defmodule SocialScribe.Meetings do
     |> Repo.preload([:calendar_event, :recall_bot, :meeting_transcript, :meeting_participants])
   end
 
-  alias SocialScribe.Meetings.MeetingTranscript
+  @doc false
+  def resolve_transcript_speaker(segment, participants \\ [])
+
+  def resolve_transcript_speaker(segment, participants) when is_map(segment) do
+    cond do
+      present_string?(get_field(segment, "speaker")) ->
+        get_field(segment, "speaker")
+
+      present_string?(participant_name(segment)) ->
+        participant_name(segment)
+
+      participant = find_participant_by_speaker_id(participants, get_field(segment, "speaker_id")) ->
+        participant.name
+
+      true ->
+        @unknown_speaker
+    end
+  end
+
+  def resolve_transcript_speaker(_segment, _participants), do: @unknown_speaker
+
+  @doc false
+  def transcript_segment_words(segment) when is_map(segment) do
+    case get_field(segment, "words") do
+      words when is_list(words) -> words
+      _ -> []
+    end
+  end
+
+  def transcript_segment_words(_segment), do: []
+
+  @doc false
+  def transcript_word_text(word) when is_map(word) do
+    get_field(word, "text") || ""
+  end
+
+  def transcript_word_text(_word), do: ""
 
   @doc """
   Returns the list of meeting_transcripts.
@@ -455,7 +493,7 @@ defmodule SocialScribe.Meetings do
         {:error, :no_participants}
 
       {:ok, participants_string} ->
-        case transcript_to_string(meeting.meeting_transcript) do
+        case transcript_to_string(meeting.meeting_transcript, meeting.meeting_participants) do
           {:error, :no_transcript} ->
             {:error, :no_transcript}
 
@@ -502,29 +540,36 @@ defmodule SocialScribe.Meetings do
     end
   end
 
-  defp transcript_to_string(%MeetingTranscript{content: %{"data" => transcript_data}})
-       when not is_nil(transcript_data) do
-    {:ok, format_transcript_for_prompt(transcript_data)}
+  defp transcript_to_string(%MeetingTranscript{content: content}, meeting_participants)
+       when is_map(content) do
+    case get_field(content, "data") do
+      transcript_data when is_list(transcript_data) ->
+        {:ok, format_transcript_for_prompt(transcript_data, meeting_participants)}
+
+      _ ->
+        {:error, :no_transcript}
+    end
   end
 
-  defp transcript_to_string(_), do: {:error, :no_transcript}
+  defp transcript_to_string(_, _), do: {:error, :no_transcript}
 
-  defp format_transcript_for_prompt(transcript_segments) when is_list(transcript_segments) do
+  defp format_transcript_for_prompt(transcript_segments, meeting_participants)
+       when is_list(transcript_segments) do
     Enum.map_join(transcript_segments, "\n", fn segment ->
-      speaker = Map.get(segment, "speaker", "Unknown Speaker")
-      words = Map.get(segment, "words", [])
-      text = Enum.map_join(words, " ", &Map.get(&1, "text", ""))
+      speaker = resolve_transcript_speaker(segment, meeting_participants)
+      words = transcript_segment_words(segment)
+      text = Enum.map_join(words, " ", &transcript_word_text/1)
       timestamp = format_timestamp(List.first(words))
       "[#{timestamp}] #{speaker}: #{text}"
     end)
   end
 
-  defp format_transcript_for_prompt(_), do: ""
+  defp format_transcript_for_prompt(_, _), do: ""
 
   defp format_timestamp(nil), do: "00:00"
 
   defp format_timestamp(word) do
-    seconds = extract_seconds(Map.get(word, "start_timestamp"))
+    seconds = extract_seconds(get_field(word, "start_timestamp"))
     total_seconds = trunc(seconds)
     minutes = div(total_seconds, 60)
     secs = rem(total_seconds, 60)
@@ -534,7 +579,48 @@ defmodule SocialScribe.Meetings do
 
   # Handle map format: %{"absolute" => "...", "relative" => 41.911842}
   defp extract_seconds(%{"relative" => relative}) when is_number(relative), do: relative
+  defp extract_seconds(%{relative: relative}) when is_number(relative), do: relative
   # Handle direct float format: 0.48204318
   defp extract_seconds(seconds) when is_number(seconds), do: seconds
   defp extract_seconds(_), do: 0
+
+  defp participant_name(segment) do
+    segment
+    |> get_field("participant")
+    |> case do
+      participant when is_map(participant) -> get_field(participant, "name")
+      _ -> nil
+    end
+  end
+
+  defp find_participant_by_speaker_id(participants, speaker_id) do
+    normalized_speaker_id = normalize_id(speaker_id)
+
+    Enum.find(participants, fn participant ->
+      normalize_id(participant.recall_participant_id) == normalized_speaker_id
+    end)
+  end
+
+  defp normalize_id(nil), do: nil
+  defp normalize_id(id), do: to_string(id)
+
+  defp get_field(map, key) when is_map(map) and is_binary(key) do
+    case Map.fetch(map, key) do
+      {:ok, value} ->
+        value
+
+      :error ->
+        get_atom_field(map, key)
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp present_string?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present_string?(_value), do: false
+
+  defp get_atom_field(map, key) do
+    atom_key = String.to_existing_atom(key)
+    Map.get(map, atom_key)
+  end
 end

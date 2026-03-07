@@ -26,6 +26,8 @@ defmodule SocialScribeWeb.AuthControllerTest do
     credential = Accounts.get_user_credential(user, "salesforce", "00D123456789ABC")
     assert credential.token == "token-a"
     assert credential.refresh_token == "refresh-a"
+    assert credential.metadata["instance_url"] == "https://acme.my.salesforce.com"
+    assert credential.metadata["identity_url"] == "https://login.salesforce.com/id/00D123/005123"
   end
 
   test "salesforce callback updates existing credential for logged-in user", %{
@@ -61,6 +63,7 @@ defmodule SocialScribeWeb.AuthControllerTest do
     assert updated.id == existing.id
     assert updated.token == "new-token"
     assert updated.refresh_token == "new-refresh"
+    assert updated.metadata["instance_url"] == "https://acme.my.salesforce.com"
   end
 
   defp salesforce_auth(uid, token, refresh_token, email) do
@@ -74,6 +77,20 @@ defmodule SocialScribeWeb.AuthControllerTest do
         token: token,
         refresh_token: refresh_token,
         expires_at: DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.to_unix()
+      },
+      extra: %Ueberauth.Auth.Extra{
+        raw_info: %{
+          token: %OAuth2.AccessToken{
+            access_token: token,
+            refresh_token: refresh_token,
+            token_type: "Bearer",
+            other_params: %{
+              "instance_url" => "https://acme.my.salesforce.com",
+              "id" => "https://login.salesforce.com/id/00D123/005123"
+            }
+          },
+          user: %{"organization_id" => uid}
+        }
       }
     }
   end

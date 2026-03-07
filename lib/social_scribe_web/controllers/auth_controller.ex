@@ -143,10 +143,22 @@ defmodule SocialScribeWeb.AuthController do
     Logger.info(inspect(auth))
 
     case Accounts.find_or_create_user_credential(user, auth) do
-      {:ok, _credential} ->
-        conn
-        |> put_flash(:info, "Salesforce account connected successfully!")
-        |> redirect(to: ~p"/dashboard/settings")
+      {:ok, credential} ->
+        metadata = salesforce_metadata_from_auth(auth)
+
+        case Accounts.update_user_credential(credential, %{metadata: metadata}) do
+          {:ok, _updated_credential} ->
+            conn
+            |> put_flash(:info, "Salesforce account connected successfully!")
+            |> redirect(to: ~p"/dashboard/settings")
+
+          {:error, reason} ->
+            Logger.error("Failed to persist Salesforce metadata: #{inspect(reason)}")
+
+            conn
+            |> put_flash(:error, "Salesforce connected, but metadata could not be saved.")
+            |> redirect(to: ~p"/dashboard/settings")
+        end
 
       {:error, reason} ->
         Logger.error("Failed to save Salesforce credential: #{inspect(reason)}")
@@ -183,5 +195,25 @@ defmodule SocialScribeWeb.AuthController do
     conn
     |> put_flash(:error, "There was an error signing you in. Please try again.")
     |> redirect(to: ~p"/")
+  end
+
+  defp salesforce_metadata_from_auth(auth) do
+    token = get_in(auth, [Access.key(:extra), Access.key(:raw_info), Access.key(:token)])
+    user = get_in(auth, [Access.key(:extra), Access.key(:raw_info), Access.key(:user)]) || %{}
+
+    other_params =
+      case token do
+        %{other_params: params} when is_map(params) -> params
+        _ -> %{}
+      end
+
+    %{
+      "instance_url" => other_params["instance_url"],
+      "identity_url" => other_params["id"],
+      "id_url" => other_params["id"],
+      "org_id" => user["organization_id"] || auth.uid
+    }
+    |> Enum.reject(fn {_k, value} -> is_nil(value) end)
+    |> Map.new()
   end
 end

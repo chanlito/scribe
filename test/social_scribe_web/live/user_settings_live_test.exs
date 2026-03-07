@@ -3,6 +3,7 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
 
   import Phoenix.LiveViewTest
   import SocialScribe.AccountsFixtures
+  alias SocialScribe.Accounts
 
   describe "UserSettingsLive" do
     @describetag :capture_log
@@ -90,6 +91,27 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
       |> render_submit(%{"salesforce_connect" => %{"env" => "sandbox", "domain" => ""}})
 
       assert_redirect(view, ~p"/auth/salesforce?env=sandbox")
+    end
+
+    test "can disconnect own Salesforce credential from settings", %{conn: conn, user: user} do
+      credential = salesforce_credential_fixture(%{user_id: user.id, uid: "sf-own"})
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
+
+      view
+      |> element(
+        "button[phx-click='confirm_disconnect_salesforce'][phx-value-id='#{credential.id}']"
+      )
+      |> render_click()
+
+      assert has_element?(view, "#salesforce-disconnect-modal")
+
+      view
+      |> element("button[phx-click='disconnect_salesforce'][phx-value-id='#{credential.id}']")
+      |> render_click()
+
+      assert render(view) =~ "Salesforce account disconnected successfully."
+      assert Accounts.get_user_credential(user, "salesforce", "sf-own") == nil
     end
   end
 end

@@ -6,7 +6,7 @@ defmodule SocialScribe.AIContentGenerator do
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
 
-  @gemini_model "gemini-2.0-flash-lite"
+  @default_gemini_model "gemini-2.5-flash-lite"
   @gemini_api_base_url "https://generativelanguage.googleapis.com/v1beta/models"
 
   @impl SocialScribe.AIContentGeneratorApi
@@ -101,6 +101,102 @@ defmodule SocialScribe.AIContentGenerator do
     end
   end
 
+  @impl SocialScribe.AIContentGeneratorApi
+  def generate_salesforce_suggestions(meeting) do
+    generate_salesforce_suggestions(meeting, [])
+  end
+
+  @impl SocialScribe.AIContentGeneratorApi
+  def generate_salesforce_suggestions(meeting, custom_fields) when is_list(custom_fields) do
+    case Meetings.generate_prompt_for_meeting(meeting) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, meeting_prompt} ->
+        custom_field_lines =
+          custom_fields
+          |> Enum.map(fn field ->
+            name = Map.get(field, :name) || Map.get(field, "name")
+            label = Map.get(field, :label) || Map.get(field, "label") || name
+            "- #{name} (#{label})"
+          end)
+          |> Enum.join("\n")
+
+        custom_field_instructions =
+          if custom_field_lines == "" do
+            "No custom Salesforce Contact fields were provided."
+          else
+            """
+            Additional custom Contact fields available in this org:
+            #{custom_field_lines}
+            """
+          end
+
+        prompt = """
+        You are an AI assistant that extracts Salesforce Contact field updates from meeting transcripts.
+
+        Analyze the transcript and extract updates for Salesforce Contact fields only.
+
+        Allowed fields:
+        - firstname
+        - lastname
+        - email
+        - phone
+        - mobilephone
+        - title
+        - department
+        - mailingstreet
+        - mailingcity
+        - mailingstate
+        - mailingpostalcode
+        - mailingcountry
+        - plus any custom Contact API field names provided below (usually ending in __c)
+
+        #{custom_field_instructions}
+
+        IMPORTANT:
+        - Only extract values that are explicitly stated in the transcript.
+        - Do not infer, normalize, or guess values.
+        - Ignore company/account level updates.
+        - Use lowercase standard field keys above for standard fields.
+        - Use exact API names (case-sensitive) for custom fields.
+        - The "field" is the Salesforce field identifier. The "value" is the actual transcript value to write into Salesforce.
+        - Never repeat a field name, API name, or label in "value" unless the speaker literally said that exact text.
+        - For custom fields, choose the correct field identifier, then return the spoken number/text as "value".
+        - For money/numeric values, NEVER split one spoken amount into multiple suggestions.
+        - If the speaker says one amount (for example "four hundred and twelve thousand dollars"), return exactly ONE value for that field (for example "$412000"), not "$400000" plus "$12000".
+        - Do not decompose a single figure into additive parts, components, or ranges unless the speaker explicitly gave multiple distinct amounts.
+
+        Return a JSON array where each object includes:
+        - "field": one of the allowed field names above
+        - "value": extracted value
+        - "context": a short quote showing where this appears
+        - "timestamp": MM:SS
+
+        Example:
+        [
+          {"field": "mobilephone", "value": "8885550000", "context": "My mobile phone is 8885550000", "timestamp": "00:42"},
+          {"field": "Account_Value__c", "value": "$137,201.43", "context": "Our account value is now $137,201.43", "timestamp": "05:14"},
+          {"field": "Budget__c", "value": "$412000", "context": "Our budget is four hundred and twelve thousand dollars", "timestamp": "08:03"}
+        ]
+
+        If no updates are found, return [].
+        Return valid JSON only.
+
+        Meeting transcript:
+        #{meeting_prompt}
+        """
+
+        case call_gemini(prompt) do
+          {:ok, response} ->
+            parse_salesforce_suggestions(response, custom_fields)
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+    end
+  end
+
   defp parse_hubspot_suggestions(response) do
     # Clean up the response - remove markdown code blocks if present
     cleaned =
@@ -136,13 +232,72 @@ defmodule SocialScribe.AIContentGenerator do
     end
   end
 
+  defp parse_salesforce_suggestions(response, custom_fields) do
+    cleaned =
+      response
+      |> String.trim()
+      |> String.replace(~r/^```json\n?/, "")
+      |> String.replace(~r/\n?```$/, "")
+      |> String.trim()
+
+    case Jason.decode(cleaned) do
+      {:ok, suggestions} when is_list(suggestions) ->
+        standard_fields = [
+          "firstname",
+          "lastname",
+          "email",
+          "phone",
+          "mobilephone",
+          "title",
+          "department",
+          "mailingstreet",
+          "mailingcity",
+          "mailingstate",
+          "mailingpostalcode",
+          "mailingcountry"
+        ]
+
+        custom_field_names =
+          Enum.map(custom_fields, fn field ->
+            Map.get(field, :name) || Map.get(field, "name")
+          end)
+          |> Enum.filter(&is_binary/1)
+
+        allowed_fields = MapSet.new(standard_fields ++ custom_field_names)
+
+        formatted =
+          suggestions
+          |> Enum.filter(&is_map/1)
+          |> Enum.map(fn s ->
+            %{
+              field: s["field"],
+              value: s["value"],
+              context: s["context"],
+              timestamp: s["timestamp"]
+            }
+          end)
+          |> Enum.filter(fn s ->
+            s.field != nil and s.value != nil and MapSet.member?(allowed_fields, s.field)
+          end)
+
+        {:ok, formatted}
+
+      {:ok, _} ->
+        {:ok, []}
+
+      {:error, _} ->
+        {:ok, []}
+    end
+  end
+
   defp call_gemini(prompt_text) do
     api_key = Application.get_env(:social_scribe, :gemini_api_key)
+    model = Application.get_env(:social_scribe, :gemini_model, @default_gemini_model)
 
     if is_nil(api_key) or api_key == "" do
       {:error, {:config_error, "Gemini API key is missing - set GEMINI_API_KEY env var"}}
     else
-      path = "/#{@gemini_model}:generateContent?key=#{api_key}"
+      path = "/#{model}:generateContent?key=#{api_key}"
 
       payload = %{
         contents: [

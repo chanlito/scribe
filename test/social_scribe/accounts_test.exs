@@ -552,6 +552,29 @@ defmodule SocialScribe.AccountsTest do
     end
   end
 
+  describe "salesforce_credentials" do
+    test "delete_user_salesforce_credential/2 deletes owned credential" do
+      user = user_fixture()
+      credential = salesforce_credential_fixture(%{user_id: user.id})
+
+      assert {:ok, %UserCredential{}} =
+               Accounts.delete_user_salesforce_credential(user, credential.id)
+
+      assert Accounts.get_user_credential(user, "salesforce", credential.uid) == nil
+    end
+
+    test "delete_user_salesforce_credential/2 rejects non-owned credential" do
+      user = user_fixture()
+      other_user = user_fixture()
+      credential = salesforce_credential_fixture(%{user_id: other_user.id})
+
+      assert {:error, :not_found} =
+               Accounts.delete_user_salesforce_credential(user, credential.id)
+
+      assert Accounts.get_user_credential(other_user, "salesforce", credential.uid)
+    end
+  end
+
   describe "facebook_page_credentials" do
     alias SocialScribe.Accounts.FacebookPageCredential
 
