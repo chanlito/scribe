@@ -20,14 +20,14 @@ defmodule SocialScribeWeb.HubspotModalTest do
     end
 
     test "renders modal when navigating to hubspot route", %{conn: conn, meeting: meeting} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       assert has_element?(view, "#hubspot-modal-wrapper")
       assert has_element?(view, "h2", "Update in HubSpot")
     end
 
     test "displays contact search input", %{conn: conn, meeting: meeting} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       assert has_element?(view, "input[placeholder*='Search']")
     end
@@ -36,7 +36,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
       conn: conn,
       meeting: meeting
     } do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       # Initially, only the contact search is shown, no form for suggestions
       # The form only appears after a contact is selected and suggestions are generated
@@ -47,7 +47,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
     end
 
     test "modal can be closed by navigating back", %{conn: conn, meeting: meeting} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       assert has_element?(view, "#hubspot-modal-wrapper")
 
@@ -81,7 +81,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
       conn: conn,
       meeting: meeting
     } do
-      {:ok, _view, html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, _view, html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       # Modal should not be present since there's no hubspot credential
       refute html =~ "hubspot-modal-wrapper"
@@ -103,7 +103,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
     end
 
     test "toggle_suggestion updates checkbox state", %{conn: conn, meeting: meeting} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       # The modal component handles toggle_suggestion events
       # We can test this by sending the event directly to the component
@@ -112,7 +112,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
     end
 
     test "contact_search input is present and accepts input", %{conn: conn, meeting: meeting} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       # Verify the search input exists and has the correct attributes
       assert has_element?(view, "input[phx-keyup='contact_search']")

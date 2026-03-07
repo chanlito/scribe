@@ -594,25 +594,25 @@ defmodule SocialScribeWeb.ModalComponents do
   end
 
   @doc """
-  Renders a HubSpot-styled modal wrapper.
+  Renders a CRM modal wrapper.
 
-  This is a specialized modal with HubSpot-specific styling:
+  A specialized modal for CRM integrations:
   - Custom overlay color
   - Reduced padding
   - No close button (relies on Cancel button in footer)
 
   ## Examples
 
-      <.hubspot_modal id="hubspot-modal" show on_cancel={JS.patch(~p"/back")}>
+      <.crm_modal id="crm-modal" show on_cancel={JS.patch(~p"/back")}>
         Modal content here
-      </.hubspot_modal>
+      </.crm_modal>
   """
   attr :id, :string, required: true
   attr :show, :boolean, default: false
   attr :on_cancel, JS, default: %JS{}
   slot :inner_block, required: true
 
-  def hubspot_modal(assigns) do
+  def crm_modal(assigns) do
     ~H"""
     <div
       id={@id}
@@ -652,18 +652,6 @@ defmodule SocialScribeWeb.ModalComponents do
       </div>
     </div>
     """
-  end
-
-  @doc """
-  Renders a Salesforce-styled modal wrapper.
-  """
-  attr :id, :string, required: true
-  attr :show, :boolean, default: false
-  attr :on_cancel, JS, default: %JS{}
-  slot :inner_block, required: true
-
-  def salesforce_modal(assigns) do
-    hubspot_modal(assigns)
   end
 
   defp show_modal(js \\ %JS{}, id) when is_binary(id) do

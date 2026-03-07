@@ -7,29 +7,17 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   alias SocialScribe.CRM.Providers.Hubspot.Api
   alias SocialScribe.CRM.Providers.Hubspot.Suggestions
 
-  @mapping_fields [
-    %{name: "firstname", label: "First Name", type: "string", options: []},
-    %{name: "lastname", label: "Last Name", type: "string", options: []},
-    %{name: "email", label: "Email", type: "string", options: []},
-    %{name: "phone", label: "Phone", type: "string", options: []},
-    %{name: "mobilephone", label: "Mobile Phone", type: "string", options: []},
-    %{name: "company", label: "Company", type: "string", options: []},
-    %{name: "jobtitle", label: "Job Title", type: "string", options: []},
-    %{name: "address", label: "Address", type: "string", options: []},
-    %{name: "city", label: "City", type: "string", options: []},
-    %{name: "state", label: "State", type: "string", options: []},
-    %{name: "zip", label: "ZIP Code", type: "string", options: []},
-    %{name: "country", label: "Country", type: "string", options: []},
-    %{name: "website", label: "Website", type: "string", options: []},
-    %{name: "linkedin_url", label: "LinkedIn", type: "string", options: []},
-    %{name: "twitter_handle", label: "Twitter", type: "string", options: []}
-  ]
-
   @impl true
   def provider_id, do: :hubspot
 
   @impl true
   def display_name, do: "HubSpot"
+
+  @impl true
+  def description, do: "Update CRM contacts with information from this meeting"
+
+  @impl true
+  def button_class, do: "bg-orange-500 hover:bg-orange-600"
 
   @impl true
   def account_select_label, do: "Select HubSpot Account"
@@ -74,7 +62,7 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
          %{
            selected_contact: contact,
            suggestions: merged,
-           mapping_fields: @mapping_fields
+           mapping_fields: Suggestions.default_mapping_fields()
          }}
 
       {:error, reason} ->
@@ -83,7 +71,7 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   end
 
   @impl true
-  def default_mapping_fields, do: @mapping_fields
+  def default_mapping_fields, do: Suggestions.default_mapping_fields()
 
   @impl true
   def prepare_suggestions(suggestions, _selected_contact, mapping_fields) do
@@ -149,26 +137,12 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   def format_search_error(reason), do: "Failed to search contacts: #{inspect(reason)}"
 
   @impl true
-  def format_suggestion_error({:api_error, 429, body}) do
-    retry_seconds = extract_retry_seconds(body)
+  defdelegate format_suggestion_error(reason), to: SocialScribe.CRM.GeminiErrors
 
-    retry_hint =
-      if retry_seconds do
-        " Please retry in about #{retry_seconds} seconds."
-      else
-        " Please retry shortly."
-      end
-
-    "AI suggestion generation is rate-limited by Gemini quota." <>
-      retry_hint <>
-      " If this persists, check Gemini API quota/billing settings."
+  @impl true
+  def update_contact(credential, contact_id, updates) do
+    api_impl().update_contact(credential, contact_id, updates)
   end
-
-  def format_suggestion_error({:config_error, message}) when is_binary(message) do
-    "AI suggestion generation is unavailable: #{message}"
-  end
-
-  def format_suggestion_error(reason), do: "Failed to generate suggestions: #{inspect(reason)}"
 
   @impl true
   def format_update_error(reason), do: "Failed to update contact: #{inspect(reason)}"
@@ -203,28 +177,6 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
       field -> field.label
     end
   end
-
-  defp extract_retry_seconds(%{"error" => %{"details" => details}}) when is_list(details) do
-    details
-    |> Enum.find_value(fn
-      %{"@type" => "type.googleapis.com/google.rpc.RetryInfo", "retryDelay" => delay} ->
-        case Regex.run(~r/^(\d+(?:\.\d+)?)s$/, delay, capture: :all_but_first) do
-          [seconds] ->
-            case Float.parse(seconds) do
-              {value, _} -> trunc(Float.ceil(value))
-              :error -> nil
-            end
-
-          _ ->
-            nil
-        end
-
-      _ ->
-        nil
-    end)
-  end
-
-  defp extract_retry_seconds(_), do: nil
 
   defp api_impl do
     Application.get_env(:social_scribe, :hubspot_api, Api)

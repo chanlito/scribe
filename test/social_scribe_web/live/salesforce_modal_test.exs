@@ -20,7 +20,7 @@ defmodule SocialScribeWeb.SalesforceModalTest do
     end
 
     test "renders modal when navigating to salesforce route", %{conn: conn, meeting: meeting} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       assert has_element?(view, "#salesforce-modal-wrapper")
       assert has_element?(view, "h2", "Update in Salesforce")
@@ -30,7 +30,7 @@ defmodule SocialScribeWeb.SalesforceModalTest do
       conn: conn,
       meeting: meeting
     } do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       assert has_element?(view, "input[phx-keyup='contact_search']")
       refute has_element?(view, "select[name='credential_id']")
@@ -43,7 +43,7 @@ defmodule SocialScribeWeb.SalesforceModalTest do
     } do
       _other = salesforce_credential_fixture(%{user_id: user.id})
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       assert has_element?(view, "select[name='credential_id']")
       assert has_element?(view, "label[for='salesforce-modal-wrapper-credential-select']")
@@ -78,7 +78,7 @@ defmodule SocialScribeWeb.SalesforceModalTest do
       conn: conn,
       meeting: meeting
     } do
-      {:ok, _view, html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, _view, html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
       refute html =~ "salesforce-modal-wrapper"
     end
   end

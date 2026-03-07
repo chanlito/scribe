@@ -10,6 +10,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
     assigns = assign(assigns, :patch, ~p"/dashboard/meetings/#{assigns.meeting}")
     assigns = assign(assigns, :modal_id, assigns.modal_id || "crm-modal-wrapper")
     assigns = assign(assigns, :provider_name, assigns.provider.display_name())
+    assigns = assign(assigns, :provider_button_class, assigns.provider.button_class())
     assigns = assign(assigns, :capabilities, assigns.provider.capabilities())
 
     assigns =
@@ -79,6 +80,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           mapping_fields={@mapping_fields}
           form_error={@form_error}
           provider_name={@provider_name}
+          provider_button_class={@provider_button_class}
           capabilities={@capabilities}
         />
       <% end %>
@@ -94,6 +96,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   attr :mapping_fields, :list, required: true
   attr :form_error, :string, default: nil
   attr :provider_name, :string, required: true
+  attr :provider_button_class, :string, required: true
   attr :capabilities, :map, required: true
 
   defp suggestions_section(assigns) do
@@ -145,7 +148,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
             <.modal_footer
               cancel_patch={if @updating, do: nil, else: @patch}
               submit_text={"Update #{@provider_name}"}
-              submit_class="bg-hubspot-button hover:bg-hubspot-button-hover"
+              submit_class={@provider_button_class}
               disabled={@selected_count == 0}
               loading={@updating}
               loading_text="Updating..."

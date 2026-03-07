@@ -46,6 +46,17 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Suggestions do
 
   def allowed_fields, do: @allowed_fields
 
+  def default_mapping_fields do
+    Enum.map(@allowed_fields, fn field ->
+      %{
+        name: field,
+        label: Map.get(@field_labels, field, field),
+        type: "string",
+        options: []
+      }
+    end)
+  end
+
   @doc """
   Generates suggested updates for a HubSpot contact based on a meeting transcript.
 
@@ -400,63 +411,110 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Suggestions do
     end
   end
 
-  # Timestamp precedence: exact phrase match in words, then segment-level match, then AI fallback.
+  # Timestamp resolution strategy:
+  # 1. Collect ALL matching timestamps from phrase and segment lookups (ignoring 0-second results,
+  #    which indicate a word was found but carries no timing data).
+  # 2. If matches exist and the AI provided a timestamp hint, pick the occurrence nearest to it.
+  # 3. If matches exist and the AI has no timestamp, pick the latest occurrence.
+  # 4. If no matches exist but the transcript has timing data, return nil (don't trust AI timestamp).
+  # 5. If the transcript has no timing data at all, fall back to the AI-provided timestamp.
   defp resolve_timestamp(ai_timestamp, context, value, transcript_index) do
     context_query = normalize_text(context)
     value_query = normalize_text(value)
 
-    resolved_seconds =
+    all_seconds =
       [
-        find_phrase_seconds(transcript_index, value_query),
-        find_phrase_seconds(transcript_index, context_query),
-        find_segment_seconds(transcript_index, value_query),
-        find_segment_seconds(transcript_index, context_query)
+        find_all_phrase_seconds(transcript_index, value_query),
+        find_all_phrase_seconds(transcript_index, context_query),
+        find_all_segment_seconds(transcript_index, value_query),
+        find_all_segment_seconds(transcript_index, context_query)
       ]
-      |> Enum.filter(&is_number/1)
-      |> Enum.max(fn -> nil end)
+      |> List.flatten()
+      |> Enum.filter(fn s -> is_number(s) and s > 0 end)
 
-    case resolved_seconds do
-      seconds when is_number(seconds) -> format_mmss(seconds)
-      _ -> normalize_timestamp(ai_timestamp)
+    case all_seconds do
+      [] ->
+        if transcript_has_timing?(transcript_index),
+          do: nil,
+          else: normalize_timestamp(ai_timestamp)
+
+      seconds_list ->
+        best =
+          case parse_ai_timestamp_seconds(ai_timestamp) do
+            nil -> Enum.max(seconds_list)
+            ai_s -> Enum.min_by(seconds_list, fn s -> abs(s - ai_s) end)
+          end
+
+        format_mmss(best)
     end
   end
 
-  defp find_segment_seconds(%{segments: segments}, query) when is_binary(query),
-    do: find_segment_seconds(segments, query)
+  defp transcript_has_timing?(%{words: words}) when is_list(words) do
+    Enum.any?(words, fn %{seconds: s} -> is_number(s) and s > 0 end)
+  end
 
-  defp find_segment_seconds(segments, query) when is_list(segments) and is_binary(query) do
+  defp transcript_has_timing?(_), do: false
+
+  defp parse_ai_timestamp_seconds(nil), do: nil
+
+  defp parse_ai_timestamp_seconds(timestamp) when is_binary(timestamp) do
+    case String.split(String.trim(timestamp), ":") do
+      [minutes, seconds] ->
+        with {m, ""} <- Integer.parse(minutes),
+             {s, ""} <- Integer.parse(seconds) do
+          m * 60 + s
+        else
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_ai_timestamp_seconds(_), do: nil
+
+  defp find_all_segment_seconds(%{segments: segments}, query) when is_binary(query),
+    do: find_all_segment_seconds(segments, query)
+
+  defp find_all_segment_seconds(segments, query) when is_list(segments) and is_binary(query) do
     case String.trim(query) do
       "" ->
-        nil
+        []
 
       normalized_query ->
-        Enum.find_value(segments, fn segment ->
-          if String.contains?(segment.normalized, normalized_query), do: segment.seconds
-        end)
+        segments
+        |> Enum.filter(fn segment -> String.contains?(segment.normalized, normalized_query) end)
+        |> Enum.map(& &1.seconds)
     end
   end
 
-  defp find_segment_seconds(_, _), do: nil
+  defp find_all_segment_seconds(_, _), do: []
 
-  defp find_phrase_seconds(%{words: words}, query) when is_list(words) and is_binary(query) do
+  defp find_all_phrase_seconds(%{words: words}, query) when is_list(words) and is_binary(query) do
     tokens = tokenize(query)
 
     case tokens do
       [] ->
-        nil
+        []
 
       _ ->
         words
         |> Enum.with_index()
-        |> Enum.find_value(fn {%{token: token, seconds: seconds}, index} ->
+        |> Enum.flat_map(fn {%{token: token, seconds: seconds}, index} ->
           if token == hd(tokens) and phrase_matches_at?(words, index, tokens) do
-            matched_seconds(words, index, length(tokens), seconds)
+            case matched_seconds(words, index, length(tokens), seconds) do
+              s when is_number(s) -> [s]
+              _ -> []
+            end
+          else
+            []
           end
         end)
     end
   end
 
-  defp find_phrase_seconds(_, _), do: nil
+  defp find_all_phrase_seconds(_, _), do: []
 
   defp phrase_matches_at?(words, start_index, tokens) do
     words

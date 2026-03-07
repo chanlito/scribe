@@ -3,12 +3,11 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   import SocialScribeWeb.PlatformLogo
   import SocialScribeWeb.ClipboardButton
-  import SocialScribeWeb.ModalComponents, only: [hubspot_modal: 1, salesforce_modal: 1]
+  import SocialScribeWeb.ModalComponents, only: [crm_modal: 1]
 
+  alias SocialScribe.CRM.Registry
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
-  alias SocialScribe.CRM.Providers.Hubspot.Provider, as: HubspotProvider
-  alias SocialScribe.CRM.Providers.Salesforce.Provider, as: SalesforceProvider
   alias SocialScribeWeb.DateTimeFormat
   alias SocialScribeWeb.MeetingLive.CrmModalComponent
 
@@ -31,9 +30,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
       {:error, socket}
     else
-      hubspot_credentials = HubspotProvider.list_credentials(socket.assigns.current_user)
-      salesforce_credentials = SalesforceProvider.list_credentials(socket.assigns.current_user)
-      hubspot_credential = List.first(hubspot_credentials)
+      crm_providers = Registry.providers_for_user(socket.assigns.current_user)
 
       socket =
         socket
@@ -42,9 +39,8 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         |> assign(:meeting, meeting)
         |> assign(:automation_results, automation_results)
         |> assign(:user_has_automations, user_has_automations)
-        |> assign(:hubspot_credential, hubspot_credential)
-        |> assign(:hubspot_credentials, hubspot_credentials)
-        |> assign(:salesforce_credentials, salesforce_credentials)
+        |> assign(:crm_providers, crm_providers)
+        |> assign(:active_provider, nil)
         |> assign(:crm_modal_locked, false)
         |> assign(
           :follow_up_email_form,
@@ -55,6 +51,26 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
       {:ok, socket}
     end
+  end
+
+  @impl true
+  def handle_params(%{"provider_id" => provider_id}, _uri, socket) do
+    case Registry.provider_for_id(String.to_existing_atom(provider_id)) do
+      {:ok, provider} ->
+        {:noreply, assign(socket, :active_provider, provider)}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Unknown CRM provider.")
+         |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")}
+    end
+  rescue
+    ArgumentError ->
+      {:noreply,
+       socket
+       |> put_flash(:error, "Unknown CRM provider.")
+       |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")}
   end
 
   @impl true
@@ -153,7 +169,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   @impl true
   def handle_info({:crm_apply_updates, provider, updates, contact, credential}, socket) do
-    case apply_updates(provider, credential, contact.id, updates) do
+    case provider.update_contact(credential, contact.id, updates) do
       {:ok, _updated_contact} ->
         socket =
           socket
@@ -185,30 +201,6 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   defp modal_component_id(provider) do
     "#{provider.provider_id()}-modal"
-  end
-
-  defp apply_updates(SalesforceProvider, credential, contact_id, updates) do
-    salesforce_api_impl().update_contact(credential, contact_id, updates)
-  end
-
-  defp apply_updates(HubspotProvider, credential, contact_id, updates) do
-    hubspot_api_impl().update_contact(credential, contact_id, updates)
-  end
-
-  defp hubspot_api_impl do
-    Application.get_env(
-      :social_scribe,
-      :hubspot_api,
-      SocialScribe.CRM.Providers.Hubspot.Api
-    )
-  end
-
-  defp salesforce_api_impl do
-    Application.get_env(
-      :social_scribe,
-      :salesforce_api,
-      SocialScribe.CRM.Providers.Salesforce.Api
-    )
   end
 
   defp format_duration(nil), do: "N/A"

@@ -40,7 +40,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, mock_contacts}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -71,7 +71,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, mock_contacts}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-focus='open_contact_dropdown']")
@@ -95,7 +95,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
           "Salesforce identity is missing. Please reconnect Salesforce to search only contacts you own."}}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -151,7 +151,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, mock_suggestions}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -212,7 +212,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
           }}}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -266,7 +266,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -345,7 +345,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -424,7 +424,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -508,7 +508,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -582,7 +582,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -666,7 +666,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -756,7 +756,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -838,7 +838,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -925,7 +925,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -985,7 +985,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
       SocialScribe.AIContentGeneratorMock
       |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields -> {:ok, []} end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       view
       |> element("input[phx-keyup='contact_search']")

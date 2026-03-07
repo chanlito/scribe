@@ -9,7 +9,8 @@ module.exports = {
   content: [
     "./js/**/*.js",
     "../lib/social_scribe_web.ex",
-    "../lib/social_scribe_web/**/*.*ex"
+    "../lib/social_scribe_web/**/*.*ex",
+    "../lib/social_scribe/crm/**/*.*ex"
   ],
   theme: {
     extend: {

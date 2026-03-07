@@ -50,7 +50,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, mock_contacts}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       # Trigger contact search
       view
@@ -74,7 +74,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:error, {:api_error, 500, %{"message" => "Internal server error"}}}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -118,7 +118,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, mock_suggestions}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       # Search for contact
       view
@@ -155,7 +155,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, [mock_contact]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -199,7 +199,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       view
       |> element("input[phx-keyup='contact_search']")
@@ -265,7 +265,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
          ]}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
       view
       |> element("input[phx-keyup='contact_search']")

@@ -8,6 +8,8 @@ defmodule SocialScribe.CRM.Provider do
 
   @callback provider_id() :: atom()
   @callback display_name() :: String.t()
+  @callback description() :: String.t()
+  @callback button_class() :: String.t()
   @callback account_select_label() :: String.t()
   @callback capabilities() :: map()
 
@@ -27,6 +29,9 @@ defmodule SocialScribe.CRM.Provider do
   @callback apply_form_state([map()], map(), map() | nil, [map()]) :: {[map()], String.t() | nil}
 
   @callback build_updates([map()]) :: {:ok, map()} | {:error, String.t()}
+
+  @callback update_contact(UserCredential.t(), String.t(), map()) ::
+              {:ok, map() | :no_updates} | {:error, any()}
 
   @callback format_search_error(any()) :: String.t()
   @callback format_suggestion_error(any()) :: String.t()
