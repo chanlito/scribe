@@ -316,6 +316,24 @@ defmodule SocialScribe.Accounts do
     Repo.get_by(UserCredential, user_id: user_id, provider: "hubspot")
   end
 
+  @doc """
+  Deletes a Salesforce credential owned by the provided user.
+  Returns `{:error, :not_found}` when the credential does not belong to the user.
+  """
+  def delete_user_salesforce_credential(user, credential_id) do
+    with {credential_id, ""} <- Integer.parse(to_string(credential_id)),
+         %UserCredential{} = credential <-
+           Repo.get_by(UserCredential,
+             id: credential_id,
+             user_id: user.id,
+             provider: "salesforce"
+           ) do
+      delete_user_credential(credential)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
   defp get_user_by_oauth_uid(provider, uid) do
     from(c in UserCredential,
       where: c.provider == ^provider and c.uid == ^uid,
