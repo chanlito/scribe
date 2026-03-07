@@ -2,7 +2,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias SocialScribe.HubspotSuggestions
+  alias SocialScribe.CRM.Providers.Hubspot.Suggestions
 
   @hubspot_fields [
     "firstname",
@@ -28,7 +28,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 5),
               contact <- contact_generator()
             ) do
-        result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
 
         for suggestion <- result do
           current_in_contact = get_contact_value(contact, suggestion.field)
@@ -45,7 +45,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 5),
               contact <- contact_generator()
             ) do
-        result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
 
         for suggestion <- result do
           assert suggestion.has_change == true,
@@ -59,7 +59,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 5),
               contact <- contact_generator()
             ) do
-        result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
 
         for suggestion <- result do
           assert suggestion.apply == true,
@@ -73,7 +73,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 0, max_length: 10),
               contact <- contact_generator()
             ) do
-        result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
 
         assert length(result) <= length(suggestions),
                "Output length #{length(result)} should be <= input length #{length(suggestions)}"
@@ -85,7 +85,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 5),
               contact <- contact_generator()
             ) do
-        result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
 
         for suggestion <- result do
           expected_current = get_contact_value(contact, suggestion.field)
@@ -99,7 +99,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
 
     property "empty suggestions list returns empty list" do
       check all(contact <- contact_generator()) do
-        result = HubspotSuggestions.merge_with_contact([], contact)
+        result = Suggestions.merge_with_contact([], contact)
         assert result == []
       end
     end

@@ -1,10 +1,10 @@
-defmodule SocialScribe.HubspotApi do
+defmodule SocialScribe.CRM.Providers.Hubspot.Api do
   @moduledoc """
   HubSpot CRM API client for contacts operations.
   Implements automatic token refresh on 401/expired token errors.
   """
 
-  @behaviour SocialScribe.HubspotApiBehaviour
+  @behaviour SocialScribe.CRM.ApiBehaviour
 
   alias SocialScribe.Accounts.UserCredential
   alias SocialScribe.HubspotTokenRefresher

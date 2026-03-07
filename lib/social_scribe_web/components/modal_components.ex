@@ -33,6 +33,7 @@ defmodule SocialScribeWeb.ModalComponents do
   attr :target, :any, default: nil
   attr :error, :string, default: nil
   attr :id, :string, default: "contact-select"
+  attr :has_more, :boolean, default: false
 
   def contact_select(assigns) do
     ~H"""
@@ -147,6 +148,15 @@ defmodule SocialScribeWeb.ModalComponents do
                 {contact.email}
               </div>
             </div>
+          </button>
+          <button
+            :if={@has_more && !@loading}
+            type="button"
+            phx-click="load_more_contacts"
+            phx-target={@target}
+            class="w-full text-center px-4 py-2 text-sm text-hubspot-link hover:text-hubspot-link-hover"
+          >
+            Load more contacts
           </button>
         </div>
       </div>

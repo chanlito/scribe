@@ -187,8 +187,10 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, expected}
       end)
 
+      impl = Application.fetch_env!(:social_scribe, :hubspot_api)
+
       assert {:ok, ^expected} =
-               SocialScribe.HubspotApiBehaviour.search_contacts(credential, "test query")
+               impl.search_contacts(credential, "test query")
     end
 
     test "get_contact delegates to implementation", %{credential: credential} do
@@ -200,7 +202,8 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, expected}
       end)
 
-      assert {:ok, ^expected} = SocialScribe.HubspotApiBehaviour.get_contact(credential, "123")
+      impl = Application.fetch_env!(:social_scribe, :hubspot_api)
+      assert {:ok, ^expected} = impl.get_contact(credential, "123")
     end
 
     test "update_contact delegates to implementation", %{credential: credential} do
@@ -214,8 +217,10 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, expected}
       end)
 
+      impl = Application.fetch_env!(:social_scribe, :hubspot_api)
+
       assert {:ok, ^expected} =
-               SocialScribe.HubspotApiBehaviour.update_contact(credential, "123", updates)
+               impl.update_contact(credential, "123", updates)
     end
 
     test "apply_updates delegates to implementation", %{credential: credential} do
@@ -231,8 +236,8 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
         {:ok, %{id: "123"}}
       end)
 
-      assert {:ok, _} =
-               SocialScribe.HubspotApiBehaviour.apply_updates(credential, "123", updates_list)
+      impl = Application.fetch_env!(:social_scribe, :hubspot_api)
+      assert {:ok, _} = impl.apply_updates(credential, "123", updates_list)
     end
   end
 

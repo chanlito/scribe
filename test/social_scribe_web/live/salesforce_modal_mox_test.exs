@@ -1034,8 +1034,10 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, expected}
       end)
 
+      impl = Application.fetch_env!(:social_scribe, :salesforce_api)
+
       assert {:ok, ^expected} =
-               SocialScribe.SalesforceApiBehaviour.search_contacts(credential, "test query")
+               impl.search_contacts(credential, "test query")
     end
 
     test "get_contact delegates to implementation", %{credential: credential} do
@@ -1047,8 +1049,8 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, expected}
       end)
 
-      assert {:ok, ^expected} =
-               SocialScribe.SalesforceApiBehaviour.get_contact(credential, "0031")
+      impl = Application.fetch_env!(:social_scribe, :salesforce_api)
+      assert {:ok, ^expected} = impl.get_contact(credential, "0031")
     end
 
     test "update_contact delegates to implementation", %{credential: credential} do
@@ -1062,8 +1064,10 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, expected}
       end)
 
+      impl = Application.fetch_env!(:social_scribe, :salesforce_api)
+
       assert {:ok, ^expected} =
-               SocialScribe.SalesforceApiBehaviour.update_contact(credential, "0031", updates)
+               impl.update_contact(credential, "0031", updates)
     end
 
     test "apply_updates delegates to implementation", %{credential: credential} do
@@ -1076,8 +1080,8 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, %{id: "0031"}}
       end)
 
-      assert {:ok, _} =
-               SocialScribe.SalesforceApiBehaviour.apply_updates(credential, "0031", updates_list)
+      impl = Application.fetch_env!(:social_scribe, :salesforce_api)
+      assert {:ok, _} = impl.apply_updates(credential, "0031", updates_list)
     end
 
     test "describe_contact_fields delegates to implementation", %{credential: credential} do
@@ -1088,8 +1092,8 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         {:ok, expected}
       end)
 
-      assert {:ok, ^expected} =
-               SocialScribe.SalesforceApiBehaviour.describe_contact_fields(credential)
+      impl = Application.fetch_env!(:social_scribe, :salesforce_api)
+      assert {:ok, ^expected} = impl.describe_contact_fields(credential)
     end
   end
 

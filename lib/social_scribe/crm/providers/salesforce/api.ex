@@ -1,9 +1,10 @@
-defmodule SocialScribe.SalesforceApi do
+defmodule SocialScribe.CRM.Providers.Salesforce.Api do
   @moduledoc """
   Salesforce CRM API client for Contact operations.
   """
 
-  @behaviour SocialScribe.SalesforceApiBehaviour
+  @behaviour SocialScribe.CRM.ApiBehaviour
+  @behaviour SocialScribe.CRM.DescribeFieldsBehaviour
 
   alias SocialScribe.Accounts.UserCredential
   alias SocialScribe.SalesforceTokenRefresher

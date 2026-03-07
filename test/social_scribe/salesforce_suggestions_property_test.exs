@@ -2,7 +2,7 @@ defmodule SocialScribe.SalesforceSuggestionsPropertyTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias SocialScribe.SalesforceSuggestions
+  alias SocialScribe.CRM.Providers.Salesforce.Suggestions
 
   @salesforce_fields [
     "firstname",
@@ -25,7 +25,7 @@ defmodule SocialScribe.SalesforceSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 5),
               contact <- contact_generator()
             ) do
-        result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
 
         for suggestion <- result do
           current_in_contact = get_contact_value(contact, suggestion.field)
@@ -39,7 +39,7 @@ defmodule SocialScribe.SalesforceSuggestionsPropertyTest do
               suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 5),
               contact <- contact_generator()
             ) do
-        result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+        result = Suggestions.merge_with_contact(suggestions, contact)
         assert Enum.all?(result, &(&1.apply == true))
       end
     end

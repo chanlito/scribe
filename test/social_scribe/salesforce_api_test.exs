@@ -1,7 +1,7 @@
 defmodule SocialScribe.SalesforceApiTest do
   use SocialScribe.DataCase
 
-  alias SocialScribe.SalesforceApi
+  alias SocialScribe.CRM.Providers.Salesforce.Api
   alias SocialScribe.Accounts.UserCredential
 
   import SocialScribe.AccountsFixtures
@@ -16,7 +16,7 @@ defmodule SocialScribe.SalesforceApiTest do
         %{field: "email", new_value: "test@example.com", apply: false}
       ]
 
-      assert {:ok, :no_updates} = SalesforceApi.apply_updates(credential, "003123", updates)
+      assert {:ok, :no_updates} = Api.apply_updates(credential, "003123", updates)
     end
 
     test "returns reconnect_required when instance_url is missing" do
@@ -26,28 +26,28 @@ defmodule SocialScribe.SalesforceApiTest do
       updates = [%{field: "phone", new_value: "555-1234", apply: true}]
 
       assert {:error, {:reconnect_required, _message}} =
-               SalesforceApi.apply_updates(credential, "003123", updates)
+               Api.apply_updates(credential, "003123", updates)
     end
   end
 
   describe "normalize_update_value/2" do
     test "casts currency strings with commas to numeric JSON values" do
-      assert SalesforceApi.normalize_update_value("137,143", "currency") == 137_143.0
-      assert SalesforceApi.normalize_update_value("$137,143.50", "currency") == 137_143.5
+      assert Api.normalize_update_value("137,143", "currency") == 137_143.0
+      assert Api.normalize_update_value("$137,143.50", "currency") == 137_143.5
     end
 
     test "casts percent strings and integer strings" do
-      assert SalesforceApi.normalize_update_value("12%", "percent") == 12.0
-      assert SalesforceApi.normalize_update_value("10,000", "int") == 10_000
+      assert Api.normalize_update_value("12%", "percent") == 12.0
+      assert Api.normalize_update_value("10,000", "int") == 10_000
     end
 
     test "casts boolean string values" do
-      assert SalesforceApi.normalize_update_value("true", "boolean") == true
-      assert SalesforceApi.normalize_update_value("no", "boolean") == false
+      assert Api.normalize_update_value("true", "boolean") == true
+      assert Api.normalize_update_value("no", "boolean") == false
     end
 
     test "downcases email values before sending to Salesforce" do
-      assert SalesforceApi.normalize_update_value(
+      assert Api.normalize_update_value(
                "Michael.Thompson@northgatepartners.com",
                "email"
              ) ==
@@ -55,10 +55,10 @@ defmodule SocialScribe.SalesforceApiTest do
     end
 
     test "casts date and datetime string values to Salesforce-friendly formats" do
-      assert SalesforceApi.normalize_update_value("2026-03-07", "date") == "2026-03-07"
-      assert SalesforceApi.normalize_update_value("03/07/2026", "date") == "2026-03-07"
+      assert Api.normalize_update_value("2026-03-07", "date") == "2026-03-07"
+      assert Api.normalize_update_value("03/07/2026", "date") == "2026-03-07"
 
-      assert SalesforceApi.normalize_update_value("2026-03-07 12:30", "datetime") ==
+      assert Api.normalize_update_value("2026-03-07 12:30", "datetime") ==
                "2026-03-07T12:30:00Z"
     end
   end
@@ -69,7 +69,7 @@ defmodule SocialScribe.SalesforceApiTest do
       credential = salesforce_credential_fixture(%{user_id: user.id})
 
       assert {:error, {:reconnect_required, message}} =
-               SalesforceApi.search_contacts(credential, "john")
+               Api.search_contacts(credential, "john")
 
       assert message =~ "Please reconnect Salesforce"
     end
@@ -83,20 +83,20 @@ defmodule SocialScribe.SalesforceApiTest do
         }
       }
 
-      assert {:ok, "005ABCDEF123456"} = SalesforceApi.extract_salesforce_user_id(credential)
+      assert {:ok, "005ABCDEF123456"} = Api.extract_salesforce_user_id(credential)
     end
 
     test "returns reconnect_required for malformed identity_url" do
       credential = %UserCredential{metadata: %{"identity_url" => "https://login.salesforce.com"}}
 
       assert {:error, {:reconnect_required, _message}} =
-               SalesforceApi.extract_salesforce_user_id(credential)
+               Api.extract_salesforce_user_id(credential)
     end
   end
 
   describe "build_search_soql/2" do
     test "adds OwnerId filter for blank query" do
-      soql = SalesforceApi.build_search_soql("", "005ABCDEF123456")
+      soql = Api.build_search_soql("", "005ABCDEF123456")
 
       assert soql =~ "FROM Contact"
       assert soql =~ "WHERE OwnerId = '005ABCDEF123456'"
@@ -104,7 +104,7 @@ defmodule SocialScribe.SalesforceApiTest do
     end
 
     test "adds OwnerId filter for typed query" do
-      soql = SalesforceApi.build_search_soql("john", "005ABCDEF123456")
+      soql = Api.build_search_soql("john", "005ABCDEF123456")
 
       assert soql =~ "FROM Contact"
       assert soql =~ "WHERE OwnerId = '005ABCDEF123456' AND ("

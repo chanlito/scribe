@@ -29,6 +29,9 @@ config :social_scribe,
   ecto_repos: [SocialScribe.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+config :social_scribe, :hubspot_api, SocialScribe.CRM.Providers.Hubspot.Api
+config :social_scribe, :salesforce_api, SocialScribe.CRM.Providers.Salesforce.Api
+
 # Configures the endpoint
 config :social_scribe, SocialScribeWeb.Endpoint,
   url: [host: "localhost"],

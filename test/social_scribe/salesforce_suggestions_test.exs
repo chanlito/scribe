@@ -4,7 +4,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
   import Mox
   import SocialScribe.AccountsFixtures
 
-  alias SocialScribe.SalesforceSuggestions
+  alias SocialScribe.CRM.Providers.Salesforce.Suggestions
 
   setup :verify_on_exit!
 
@@ -38,7 +38,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         email: "test@example.com"
       }
 
-      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      result = Suggestions.merge_with_contact(suggestions, contact)
 
       assert length(result) == 1
       assert hd(result).field == "phone"
@@ -63,7 +63,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         email: "test@example.com"
       }
 
-      assert SalesforceSuggestions.merge_with_contact(suggestions, contact) == []
+      assert Suggestions.merge_with_contact(suggestions, contact) == []
     end
 
     test "normalizes email suggestions to lowercase" do
@@ -84,7 +84,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         email: nil
       }
 
-      [result] = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      [result] = Suggestions.merge_with_contact(suggestions, contact)
       assert result.new_value == "michael.thompson@northgatepartners.com"
     end
 
@@ -114,7 +114,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
 
       contact = %{id: "003123", firstname: "Ani"}
 
-      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      result = Suggestions.merge_with_contact(suggestions, contact)
 
       assert length(result) == 1
       assert hd(result).field == "firstname"
@@ -142,7 +142,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         fields: %{"Account_Value__c" => "$50,000.00"}
       }
 
-      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      result = Suggestions.merge_with_contact(suggestions, contact)
 
       assert length(result) == 1
       assert hd(result).current_value == "$50,000.00"
@@ -169,7 +169,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         fields: %{}
       }
 
-      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      result = Suggestions.merge_with_contact(suggestions, contact)
 
       assert length(result) == 1
       assert hd(result).current_value == "ACME Corp"
@@ -195,7 +195,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         fields: %{"Account_Value__c" => 5.0e4}
       }
 
-      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      result = Suggestions.merge_with_contact(suggestions, contact)
 
       assert length(result) == 1
       assert hd(result).current_value == "50000"
@@ -220,7 +220,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
         fields: %{"Account_Value__c" => 5.0e4}
       }
 
-      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+      result = Suggestions.merge_with_contact(suggestions, contact)
       assert result == []
     end
   end
@@ -289,7 +289,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       end)
 
       assert {:ok, %{suggestions: [suggestion], mapping_fields: mapping_fields}} =
-               SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
+               Suggestions.generate_suggestions(credential, "003123", meeting)
 
       assert suggestion.timestamp == "01:19"
       assert suggestion.context == "Please update my first name to Tyler"
@@ -336,7 +336,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       end)
 
       assert {:ok, %{suggestions: [suggestion]}} =
-               SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
+               Suggestions.generate_suggestions(credential, "003123", meeting)
 
       assert suggestion.timestamp == "02:10"
     end
@@ -383,7 +383,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       end)
 
       assert {:ok, %{mapping_fields: mapping_fields}} =
-               SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
+               Suggestions.generate_suggestions(credential, "003123", meeting)
 
       assert Enum.find(mapping_fields, &(&1.name == "mailingcountry")).options == [
                "United States",
@@ -464,7 +464,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       end)
 
       assert {:ok, %{suggestions: suggestions}} =
-               SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
+               Suggestions.generate_suggestions(credential, "003123", meeting)
 
       suggestions_by_field = Map.new(suggestions, &{&1.field, &1})
 
@@ -534,7 +534,7 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       end)
 
       assert {:ok, %{suggestions: suggestions}} =
-               SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
+               Suggestions.generate_suggestions(credential, "003123", meeting)
 
       assert Enum.map(suggestions, & &1.field) == ["mailingcity"]
       assert hd(suggestions).new_value == "San Diego"

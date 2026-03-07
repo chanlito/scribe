@@ -1,10 +1,10 @@
-defmodule SocialScribe.SalesforceSuggestions do
+defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
   @moduledoc """
   Generates and formats Salesforce Contact update suggestions.
   """
 
   alias SocialScribe.AIContentGeneratorApi
-  alias SocialScribe.SalesforceApiBehaviour, as: SalesforceApi
+  alias SocialScribe.CRM.Providers.Salesforce.Api
 
   @standard_field_labels %{
     "firstname" => "First Name",
@@ -49,7 +49,7 @@ defmodule SocialScribe.SalesforceSuggestions do
     mapping_fields = build_mapping_fields(describe_fields)
     transcript_index = build_transcript_index(meeting)
 
-    with {:ok, contact} <- SalesforceApi.get_contact(credential, contact_id),
+    with {:ok, contact} <- api_impl().get_contact(credential, contact_id),
          {:ok, ai_suggestions} <-
            AIContentGeneratorApi.generate_salesforce_suggestions(meeting, custom_fields) do
       suggestions =
@@ -370,7 +370,7 @@ defmodule SocialScribe.SalesforceSuggestions do
   defp timestamp_seconds(_), do: -1
 
   defp fetch_describe_fields(credential) do
-    case SalesforceApi.describe_contact_fields(credential) do
+    case api_impl().describe_contact_fields(credential) do
       {:ok, fields} when is_list(fields) -> fields
       {:ok, _} -> []
       {:error, _reason} -> []
@@ -746,5 +746,9 @@ defmodule SocialScribe.SalesforceSuggestions do
     rescue
       ArgumentError -> :error
     end
+  end
+
+  defp api_impl do
+    Application.get_env(:social_scribe, :salesforce_api, Api)
   end
 end

@@ -185,10 +185,12 @@
   on_cancel={JS.patch(~p"/dashboard/meetings/#{@meeting}")}
 >
   <.live_component
-    module={SocialScribeWeb.MeetingLive.HubspotModalComponent}
+    module={SocialScribeWeb.MeetingLive.CrmModalComponent}
     id="hubspot-modal"
     meeting={@meeting}
-    credential={@hubspot_credential}
+    provider={SocialScribe.CRM.Providers.Hubspot.Provider}
+    credentials={@hubspot_credentials}
+    selected_credential={@hubspot_credential}
     modal_id="hubspot-modal-wrapper"
   />
 </.hubspot_modal>
@@ -206,9 +208,10 @@
   }
 >
   <.live_component
-    module={SocialScribeWeb.MeetingLive.SalesforceModalComponent}
+    module={SocialScribeWeb.MeetingLive.CrmModalComponent}
     id="salesforce-modal"
     meeting={@meeting}
+    provider={SocialScribe.CRM.Providers.Salesforce.Provider}
     credentials={@salesforce_credentials}
     modal_id="salesforce-modal-wrapper"
   />

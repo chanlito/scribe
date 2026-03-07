@@ -1,12 +1,12 @@
-defmodule SocialScribe.HubspotSuggestions do
+defmodule SocialScribe.CRM.Providers.Hubspot.Suggestions do
   @moduledoc """
   Generates and formats HubSpot contact update suggestions by combining
   AI-extracted data with existing HubSpot contact information.
   """
 
   alias SocialScribe.AIContentGeneratorApi
-  alias SocialScribe.HubspotApi
   alias SocialScribe.Accounts.UserCredential
+  alias SocialScribe.CRM.Providers.Hubspot.Api
 
   @field_labels %{
     "firstname" => "First Name",
@@ -38,7 +38,7 @@ defmodule SocialScribe.HubspotSuggestions do
   - apply: boolean indicating whether to apply this update (default false)
   """
   def generate_suggestions(%UserCredential{} = credential, contact_id, meeting) do
-    with {:ok, contact} <- HubspotApi.get_contact(credential, contact_id),
+    with {:ok, contact} <- api_impl().get_contact(credential, contact_id),
          {:ok, ai_suggestions} <- AIContentGeneratorApi.generate_hubspot_suggestions(meeting) do
       suggestions =
         ai_suggestions
@@ -117,4 +117,8 @@ defmodule SocialScribe.HubspotSuggestions do
   end
 
   defp get_contact_field(_, _), do: nil
+
+  defp api_impl do
+    Application.get_env(:social_scribe, :hubspot_api, Api)
+  end
 end
