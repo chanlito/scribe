@@ -150,7 +150,7 @@ defmodule Ueberauth.Strategy.Salesforce do
     {:error, "Invalid env '#{env}'. Expected prod, sandbox, or custom"}
   end
 
-  defp resolve_request_target(_), do: {:error, "Missing required env parameter"}
+  defp resolve_request_target(_), do: {:ok, @prod_host, nil}
 
   defp normalize_custom_domain(domain) when is_binary(domain) do
     normalized = domain |> String.trim() |> String.downcase()

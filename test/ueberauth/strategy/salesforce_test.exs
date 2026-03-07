@@ -83,15 +83,17 @@ defmodule Ueberauth.Strategy.SalesforceTest do
     assert %URI{host: "acme.my.salesforce.com"} = URI.parse(location)
   end
 
-  test "request without env returns 400" do
+  test "request without env defaults to login.salesforce.com" do
     conn =
       %{}
       |> request_conn()
       |> Salesforce.handle_request!()
 
     assert conn.halted
-    assert conn.status == 400
-    assert conn.resp_body =~ "Missing required env parameter"
+    assert conn.status == 302
+
+    location = List.first(Plug.Conn.get_resp_header(conn, "location"))
+    assert %URI{host: "login.salesforce.com"} = URI.parse(location)
   end
 
   test "request with invalid custom domain returns 400" do

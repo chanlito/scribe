@@ -83,9 +83,17 @@
   </div>
 
   <div class="bg-white  shadow-xl rounded-lg p-6 md:p-8">
-    <h2 class="text-2xl font-semibold mb-6 text-slate-700 ">
-      Connected Salesforce Accounts
-    </h2>
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-semibold text-slate-700">
+        Connected Salesforce Accounts
+      </h2>
+      <div class="relative group">
+        <.icon name="hero-question-mark-circle" class="h-5 w-5 text-slate-400 cursor-help" />
+        <div class="absolute right-0 top-6 z-10 hidden group-hover:block w-72 rounded-md bg-slate-800 px-3 py-2 text-sm text-white shadow-lg">
+          If your org uses a custom domain (e.g. acme.my.salesforce.com), you can enter it directly on Salesforce's login page after clicking Connect.
+        </div>
+      </div>
+    </div>
 
     <%= if not Enum.empty?(@salesforce_accounts) do %>
       <ul class="space-y-4 mb-8">
@@ -120,50 +128,20 @@
       </p>
     <% end %>
 
-    <.simple_form
-      for={@salesforce_connect_form}
-      phx-change="salesforce_connect_change"
-      phx-submit="connect_salesforce"
-    >
-      <.input
-        type="select"
-        field={@salesforce_connect_form[:env]}
-        label="Environment"
-        options={[
-          {"Production", "prod"},
-          {"Sandbox", "sandbox"},
-          {"Custom Domain", "custom"}
-        ]}
-      />
-
-      <.input
-        :if={@salesforce_connect_env == "custom"}
-        type="text"
-        field={@salesforce_connect_form[:domain]}
-        label="Custom Domain"
-        placeholder="acme.my.salesforce.com"
-      />
-
-      <p :if={@salesforce_domain_error} class="mt-1 text-sm text-red-600">
-        {@salesforce_domain_error}
-      </p>
-
-      <:actions>
-        <button
-          type="submit"
-          phx-disable-with="Redirecting..."
-          class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
-          disabled={@salesforce_connect_env == "custom" and not is_nil(@salesforce_domain_error)}
-        >
-          <.icon name="hero-cloud" class="-ml-1 mr-3 h-5 w-5" />
-          <%= if Enum.empty?(@salesforce_accounts) do %>
-            Connect Salesforce
-          <% else %>
-            Connect another Salesforce Account
-          <% end %>
-        </button>
-      </:actions>
-    </.simple_form>
+    <div>
+      <.link
+        href={~p"/auth/salesforce"}
+        method="get"
+        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        <.icon name="hero-cloud" class="-ml-1 mr-3 h-5 w-5" />
+        <%= if Enum.empty?(@salesforce_accounts) do %>
+          Connect Salesforce
+        <% else %>
+          Connect another Salesforce Account
+        <% end %>
+      </.link>
+    </div>
   </div>
 
   <div class="bg-white  shadow-xl rounded-lg p-6 md:p-8">

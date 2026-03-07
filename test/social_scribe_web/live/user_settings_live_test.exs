@@ -61,38 +61,6 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
       assert salesforce_index < hubspot_index
     end
 
-    test "shows custom domain input when Salesforce env is custom", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
-
-      refute has_element?(view, "input[placeholder='acme.my.salesforce.com']")
-
-      view
-      |> element("form[phx-submit='connect_salesforce']")
-      |> render_change(%{"salesforce_connect" => %{"env" => "custom", "domain" => ""}})
-
-      assert has_element?(view, "input[placeholder='acme.my.salesforce.com']")
-      assert has_element?(view, "p", "Please enter a domain like acme.my.salesforce.com")
-    end
-
-    test "validates Salesforce custom domain and redirects for sandbox", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
-
-      html =
-        view
-        |> element("form[phx-submit='connect_salesforce']")
-        |> render_change(%{
-          "salesforce_connect" => %{"env" => "custom", "domain" => "bad.example.com"}
-        })
-
-      assert html =~ "Domain must end with .salesforce.com"
-
-      view
-      |> element("form[phx-submit='connect_salesforce']")
-      |> render_submit(%{"salesforce_connect" => %{"env" => "sandbox", "domain" => ""}})
-
-      assert_redirect(view, ~p"/auth/salesforce?env=sandbox")
-    end
-
     test "can disconnect own Salesforce credential from settings", %{conn: conn, user: user} do
       credential = salesforce_credential_fixture(%{user_id: user.id, uid: "sf-own"})
 
