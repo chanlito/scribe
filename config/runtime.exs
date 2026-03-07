@@ -87,7 +87,9 @@ if config_env() == :prod do
       pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
       socket_options: maybe_ipv6,
       ssl: true,
-      ssl_opts: [verify: :verify_peer, cacerts: :public_key.cacerts_get()]
+      ssl_opts: [verify: :verify_none],
+      queue_target: 5000,
+      queue_interval: 5000
     ]
   end
 
