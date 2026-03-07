@@ -4,23 +4,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
 
   alias SocialScribe.CRM.Providers.Hubspot.Suggestions
 
-  @hubspot_fields [
-    "firstname",
-    "lastname",
-    "email",
-    "phone",
-    "mobilephone",
-    "company",
-    "jobtitle",
-    "address",
-    "city",
-    "state",
-    "zip",
-    "country",
-    "website",
-    "linkedin_url",
-    "twitter_handle"
-  ]
+  @hubspot_fields Suggestions.allowed_fields()
 
   describe "merge_with_contact/2 properties" do
     property "never returns suggestions where new_value equals contact's current value" do
@@ -68,6 +52,40 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
       end
     end
 
+    property "all returned suggestions have allowed fields and non-empty normalized values" do
+      check all(
+              suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 8),
+              contact <- contact_generator()
+            ) do
+        result = Suggestions.merge_with_contact(suggestions, contact)
+
+        for suggestion <- result do
+          assert Suggestions.allowed_field?(suggestion.field)
+
+          normalized = Suggestions.normalize_field_value(suggestion.field, suggestion.new_value)
+          assert is_binary(normalized)
+          assert String.trim(normalized) != ""
+        end
+      end
+    end
+
+    property "dedupe invariant keeps unique field/new_value pairs" do
+      check all(
+              suggestions <- list_of(suggestion_generator(), min_length: 1, max_length: 12),
+              contact <- contact_generator()
+            ) do
+        result = Suggestions.merge_with_contact(suggestions, contact)
+
+        keys =
+          Enum.map(result, fn suggestion ->
+            {suggestion.field,
+             Suggestions.normalize_field_value(suggestion.field, suggestion.new_value)}
+          end)
+
+        assert length(keys) == length(Enum.uniq(keys))
+      end
+    end
+
     property "output length is always less than or equal to input length" do
       check all(
               suggestions <- list_of(suggestion_generator(), min_length: 0, max_length: 10),
@@ -88,7 +106,10 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
         result = Suggestions.merge_with_contact(suggestions, contact)
 
         for suggestion <- result do
-          expected_current = get_contact_value(contact, suggestion.field)
+          expected_current =
+            contact
+            |> get_contact_value(suggestion.field)
+            |> then(&Suggestions.normalize_field_value(suggestion.field, &1))
 
           assert suggestion.current_value == expected_current,
                  "current_value for #{suggestion.field} should be #{inspect(expected_current)}, " <>
@@ -111,7 +132,7 @@ defmodule SocialScribe.HubspotSuggestionsPropertyTest do
     gen all(
           field <- member_of(@hubspot_fields),
           new_value <-
-            one_of([string(:alphanumeric, min_length: 1, max_length: 50), constant(nil)]),
+            one_of([string(:alphanumeric, min_length: 1, max_length: 50), email_generator()]),
           context <- string(:alphanumeric, min_length: 5, max_length: 100)
         ) do
       %{

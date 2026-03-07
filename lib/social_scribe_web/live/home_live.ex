@@ -4,6 +4,7 @@ defmodule SocialScribeWeb.HomeLive do
   alias SocialScribe.Calendar
   alias SocialScribe.CalendarSyncronizer
   alias SocialScribe.Bots
+  alias SocialScribeWeb.DateTimeFormat
 
   require Logger
 
@@ -15,6 +16,7 @@ defmodule SocialScribeWeb.HomeLive do
       socket
       |> assign(:page_title, "Upcoming Meetings")
       |> assign(:events, Calendar.list_upcoming_events(socket.assigns.current_user))
+      |> assign(:timezone, DateTimeFormat.timezone_from_socket(socket))
       |> assign(:loading, true)
 
     {:ok, socket}
@@ -80,5 +82,9 @@ defmodule SocialScribeWeb.HomeLive do
       |> assign(:loading, false)
 
     {:noreply, socket}
+  end
+
+  def format_event_start_time(datetime, timezone) do
+    DateTimeFormat.format_in_timezone(datetime, timezone)
   end
 end

@@ -9,6 +9,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   alias SocialScribe.Automations
   alias SocialScribe.CRM.Providers.Hubspot.Provider, as: HubspotProvider
   alias SocialScribe.CRM.Providers.Salesforce.Provider, as: SalesforceProvider
+  alias SocialScribeWeb.DateTimeFormat
   alias SocialScribeWeb.MeetingLive.CrmModalComponent
 
   @impl true
@@ -37,13 +38,14 @@ defmodule SocialScribeWeb.MeetingLive.Show do
       socket =
         socket
         |> assign(:page_title, "Meeting Details: #{meeting.title}")
+        |> assign(:timezone, DateTimeFormat.timezone_from_socket(socket))
         |> assign(:meeting, meeting)
         |> assign(:automation_results, automation_results)
         |> assign(:user_has_automations, user_has_automations)
         |> assign(:hubspot_credential, hubspot_credential)
         |> assign(:hubspot_credentials, hubspot_credentials)
         |> assign(:salesforce_credentials, salesforce_credentials)
-        |> assign(:salesforce_modal_locked, false)
+        |> assign(:crm_modal_locked, false)
         |> assign(
           :follow_up_email_form,
           to_form(%{
@@ -155,7 +157,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
       {:ok, _updated_contact} ->
         socket =
           socket
-          |> assign(:salesforce_modal_locked, false)
+          |> assign(:crm_modal_locked, false)
           |> put_flash(
             :info,
             "Successfully updated #{map_size(updates)} field(s) in #{provider.display_name()}"
@@ -172,13 +174,13 @@ defmodule SocialScribeWeb.MeetingLive.Show do
           updating: false
         )
 
-        {:noreply, assign(socket, :salesforce_modal_locked, false)}
+        {:noreply, assign(socket, :crm_modal_locked, false)}
     end
   end
 
   @impl true
   def handle_info({:crm_modal_lock, locked?}, socket) when is_boolean(locked?) do
-    {:noreply, assign(socket, :salesforce_modal_locked, locked?)}
+    {:noreply, assign(socket, :crm_modal_locked, locked?)}
   end
 
   defp modal_component_id(provider) do
@@ -221,6 +223,10 @@ defmodule SocialScribeWeb.MeetingLive.Show do
       seconds > 0 -> "#{seconds} sec"
       true -> "Less than a second"
     end
+  end
+
+  defp format_recorded_at(datetime, timezone) do
+    DateTimeFormat.format_in_timezone(datetime, timezone)
   end
 
   attr :meeting_transcript, :map, required: true

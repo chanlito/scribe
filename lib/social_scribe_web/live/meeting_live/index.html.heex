@@ -39,7 +39,7 @@
                 <.platform_logo recall_bot={meeting.recall_bot} class="size-6" />
               </h3>
               <p class="text-sm text-slate-500 ">
-                Recorded: {meeting.recorded_at}
+                Recorded: {format_recorded_at(meeting.recorded_at, @timezone)}
               </p>
               <p class="text-xs text-slate-400 ">
                 Duration: {format_duration(meeting.duration_seconds)} | Attendees: {Enum.count(

@@ -5,6 +5,8 @@ defmodule SocialScribeWeb.MeetingLive.ShowTest do
   import SocialScribe.AccountsFixtures
   import SocialScribe.MeetingsFixtures
 
+  alias SocialScribeWeb.DateTimeFormat
+
   describe "meeting details transcript speaker names" do
     setup %{conn: conn} do
       user = user_fixture()
@@ -83,8 +85,38 @@ defmodule SocialScribeWeb.MeetingLive.ShowTest do
     end
   end
 
-  defp meeting_fixture_with_transcript(user, transcript_content, participants \\ []) do
-    meeting = meeting_fixture()
+  describe "meeting details timezone rendering" do
+    setup %{conn: conn} do
+      user = user_fixture()
+
+      %{
+        conn: log_in_user(conn, user),
+        user: user
+      }
+    end
+
+    test "renders recorded timestamp in browser timezone", %{conn: conn, user: user} do
+      recorded_at = ~U[2026-03-07 18:45:00Z]
+
+      meeting =
+        meeting_fixture_with_transcript(user, %{"data" => []}, [], recorded_at: recorded_at)
+
+      timezone = "Asia/Bangkok"
+      conn = put_connect_params(conn, %{"timezone" => timezone})
+
+      {:ok, _view, html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}")
+
+      assert html =~ DateTimeFormat.format_in_timezone(recorded_at, timezone)
+    end
+  end
+
+  defp meeting_fixture_with_transcript(
+         user,
+         transcript_content,
+         participants \\ [],
+         meeting_attrs \\ []
+       ) do
+    meeting = meeting_fixture(meeting_attrs)
 
     calendar_event = SocialScribe.Calendar.get_calendar_event!(meeting.calendar_event_id)
 

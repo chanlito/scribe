@@ -40,8 +40,8 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
       account_selection: false,
       mapping: false,
       mapping_toggle: false,
-      details_toggle: false,
-      lock_on_submit: false,
+      details_toggle: true,
+      lock_on_submit: true,
       paired_fields: false
     }
   end
@@ -109,15 +109,15 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
 
         current_value =
           selected_contact
-          |> contact_field_value(field)
-          |> normalize_for_display()
+          |> Suggestions.contact_field_value(field)
+          |> then(&Suggestions.normalize_field_value(field, &1))
 
         new_value =
           values
           |> Map.get(row_id, suggestion.new_value || "")
-          |> normalize_for_display()
+          |> then(&Suggestions.normalize_field_value(field, &1))
 
-        has_change = changed?(current_value, new_value)
+        has_change = Suggestions.changed?(current_value, new_value)
 
         suggestion
         |> Map.put(:current_value, current_value)
@@ -175,12 +175,15 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
 
   defp prepare_row(suggestion, idx, mapping_fields) do
     field = Map.get(suggestion, :mapped_field, Map.get(suggestion, :field))
-    current_value = normalize_for_display(Map.get(suggestion, :current_value))
+    current_value = Suggestions.normalize_field_value(field, Map.get(suggestion, :current_value))
 
     new_value =
-      normalize_for_display(Map.get(suggestion, :new_value, Map.get(suggestion, :value, "")))
+      Suggestions.normalize_field_value(
+        field,
+        Map.get(suggestion, :new_value, Map.get(suggestion, :value, ""))
+      )
 
-    has_change = changed?(current_value, new_value)
+    has_change = Suggestions.changed?(current_value, new_value)
 
     suggestion
     |> Map.put_new(:id, "hubspot-suggestion-#{idx}")
@@ -200,25 +203,6 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
       field -> field.label
     end
   end
-
-  defp changed?(current_value, new_value),
-    do: normalize_for_compare(current_value) != normalize_for_compare(new_value)
-
-  defp normalize_for_compare(value) when is_binary(value), do: String.trim(value)
-  defp normalize_for_compare(value), do: value
-
-  defp normalize_for_display(nil), do: nil
-  defp normalize_for_display(value) when is_binary(value), do: String.trim(value)
-  defp normalize_for_display(value), do: to_string(value)
-
-  defp contact_field_value(contact, field) when is_map(contact) and is_binary(field) do
-    atom_field = String.to_existing_atom(field)
-    Map.get(contact, atom_field)
-  rescue
-    ArgumentError -> nil
-  end
-
-  defp contact_field_value(_contact, _field), do: nil
 
   defp extract_retry_seconds(%{"error" => %{"details" => details}}) when is_list(details) do
     details

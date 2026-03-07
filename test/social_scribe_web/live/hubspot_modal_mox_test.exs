@@ -169,6 +169,143 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
       assert html =~ "Test User"
       assert html =~ "test@example.com"
     end
+
+    test "toggle hide details collapses and expands suggestion details", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "123",
+        firstname: "John",
+        lastname: "Doe",
+        email: "john@example.com",
+        phone: nil,
+        company: "Acme Corp",
+        display_name: "John Doe"
+      }
+
+      SocialScribe.HubspotApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_hubspot_suggestions, fn _meeting ->
+        {:ok,
+         [
+           %{
+             field: "phone",
+             value: "555-1234",
+             context: "Mentioned phone number"
+           }
+         ]}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "John"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='123']")
+      |> render_click()
+
+      :timer.sleep(300)
+
+      assert has_element?(
+               view,
+               "button[phx-click='toggle_suggestion_details'][aria-label='Hide details']"
+             )
+
+      assert has_element?(view, "input[name^='values[']")
+
+      view
+      |> element("button[phx-click='toggle_suggestion_details']")
+      |> render_click()
+
+      refute has_element?(view, "input[name^='values[']")
+
+      assert has_element?(
+               view,
+               "button[phx-click='toggle_suggestion_details'][aria-label='Show details']"
+             )
+    end
+
+    test "submit error keeps modal open and restores cancel action", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "123",
+        firstname: "John",
+        lastname: "Doe",
+        email: "john@example.com",
+        phone: nil,
+        company: "Acme Corp",
+        display_name: "John Doe"
+      }
+
+      SocialScribe.HubspotApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+      |> expect(:update_contact, fn _credential, "123", %{"phone" => "555-1234"} ->
+        :timer.sleep(250)
+        {:error, {:api_error, 500, %{"message" => "boom"}}}
+      end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_hubspot_suggestions, fn _meeting ->
+        {:ok,
+         [
+           %{
+             field: "phone",
+             value: "555-1234",
+             context: "Mentioned phone number"
+           }
+         ]}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "John"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='123']")
+      |> render_click()
+
+      :timer.sleep(300)
+
+      row_id = row_id_for_mapped_field(render(view), "phone")
+      refute is_nil(row_id)
+
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_submit(%{
+        "apply" => %{row_id => "1"},
+        "values" => %{row_id => "555-1234"}
+      })
+
+      :timer.sleep(350)
+
+      unlocked_html = render(view)
+      assert has_element?(view, "button[type='submit']", "Update HubSpot")
+      assert has_element?(view, "button", "Cancel")
+      assert unlocked_html =~ "Failed to update contact"
+      assert has_element?(view, "#hubspot-modal-wrapper")
+    end
+
+    test "provider capabilities include shared details toggle and submit lock behavior" do
+      capabilities = SocialScribe.CRM.Providers.Hubspot.Provider.capabilities()
+
+      assert capabilities.details_toggle
+      assert capabilities.lock_on_submit
+      refute capabilities.mapping_toggle
+      refute capabilities.paired_fields
+    end
   end
 
   describe "HubSpot API behavior delegation" do
@@ -269,5 +406,17 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
     })
 
     SocialScribe.Meetings.get_meeting_with_details(meeting.id)
+  end
+
+  defp row_id_for_mapped_field(html, mapped_field) do
+    Regex.run(
+      ~r/name=\"mapped_fields\[([^\]]+)\]\"[^>]*value=\"#{mapped_field}\"/s,
+      html,
+      capture: :all_but_first
+    )
+    |> case do
+      [row_id] -> row_id
+      _ -> nil
+    end
   end
 end

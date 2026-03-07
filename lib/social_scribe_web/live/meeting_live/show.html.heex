@@ -11,7 +11,7 @@
   </h1>
   <div class="text-sm text-slate-500 mb-6">
     <p>
-      Recorded: {@meeting.recorded_at}
+      Recorded: {format_recorded_at(@meeting.recorded_at, @timezone)}
     </p>
     <p>Duration: {format_duration(@meeting.duration_seconds)}</p>
     <p>
@@ -182,7 +182,13 @@
   :if={@live_action == :hubspot && @hubspot_credential}
   id="hubspot-modal-wrapper"
   show
-  on_cancel={JS.patch(~p"/dashboard/meetings/#{@meeting}")}
+  on_cancel={
+    if @crm_modal_locked do
+      %JS{}
+    else
+      JS.patch(~p"/dashboard/meetings/#{@meeting}")
+    end
+  }
 >
   <.live_component
     module={SocialScribeWeb.MeetingLive.CrmModalComponent}
@@ -200,7 +206,7 @@
   id="salesforce-modal-wrapper"
   show
   on_cancel={
-    if @salesforce_modal_locked do
+    if @crm_modal_locked do
       %JS{}
     else
       JS.patch(~p"/dashboard/meetings/#{@meeting}")

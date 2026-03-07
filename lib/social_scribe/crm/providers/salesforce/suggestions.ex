@@ -40,6 +40,8 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
                             %{name: name, label: label, type: "string", options: []}
                           end)
 
+  # Public API
+
   def default_mapping_fields, do: @default_mapping_fields
 
   def generate_suggestions(credential, contact_id, meeting) do
@@ -53,41 +55,12 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
          {:ok, ai_suggestions} <-
            AIContentGeneratorApi.generate_salesforce_suggestions(meeting, custom_fields) do
       suggestions =
-        ai_suggestions
-        |> Enum.filter(&valid_ai_suggestion?(&1, field_labels))
-        |> Enum.with_index(1)
-        |> Enum.map(fn {suggestion, idx} ->
-          field = normalize_field_key(suggestion.field)
-          label = Map.get(field_labels, field, field)
-          current_value = normalize_field_value(field, contact_field_value(contact, field))
-          new_value = normalize_field_value(field, suggestion.value)
-
-          timestamp =
-            resolve_timestamp(
-              Map.get(suggestion, :timestamp),
-              Map.get(suggestion, :context),
-              suggestion.value,
-              transcript_index
-            )
-
-          %{
-            id: suggestion_id(field, idx, timestamp, new_value),
-            field: field,
-            mapped_field: field,
-            label: label,
-            mapped_label: label,
-            current_value: current_value,
-            new_value: new_value,
-            context: suggestion.context,
-            timestamp: timestamp,
-            apply: true,
-            details_open: true,
-            mapping_open: false,
-            has_change: changed?(current_value, new_value)
-          }
-        end)
-        |> Enum.filter(fn suggestion -> suggestion.has_change end)
-        |> dedupe_suggestions()
+        build_suggestions(ai_suggestions, field_labels, transcript_index,
+          contact: contact,
+          filter_unchanged: true,
+          id_timestamp_source: :resolved,
+          id_value_source: :normalized
+        )
 
       {:ok, %{contact: contact, suggestions: suggestions, mapping_fields: mapping_fields}}
     end
@@ -102,36 +75,12 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     case AIContentGeneratorApi.generate_salesforce_suggestions(meeting, custom_fields) do
       {:ok, ai_suggestions} ->
         suggestions =
-          ai_suggestions
-          |> Enum.filter(&valid_ai_suggestion?(&1, field_labels))
-          |> Enum.with_index(1)
-          |> Enum.map(fn {suggestion, idx} ->
-            field = normalize_field_key(suggestion.field)
-            label = Map.get(field_labels, field, field)
-
-            %{
-              id: suggestion_id(field, idx, Map.get(suggestion, :timestamp), suggestion.value),
-              field: field,
-              mapped_field: field,
-              label: label,
-              mapped_label: label,
-              current_value: nil,
-              new_value: normalize_field_value(field, suggestion.value),
-              context: Map.get(suggestion, :context),
-              timestamp:
-                resolve_timestamp(
-                  Map.get(suggestion, :timestamp),
-                  Map.get(suggestion, :context),
-                  suggestion.value,
-                  transcript_index
-                ),
-              apply: true,
-              details_open: true,
-              mapping_open: false,
-              has_change: true
-            }
-          end)
-          |> dedupe_suggestions()
+          build_suggestions(ai_suggestions, field_labels, transcript_index,
+            contact: nil,
+            filter_unchanged: false,
+            id_timestamp_source: :ai,
+            id_value_source: :raw
+          )
 
         {:ok, suggestions}
 
@@ -146,36 +95,12 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     case AIContentGeneratorApi.generate_salesforce_suggestions(meeting) do
       {:ok, ai_suggestions} ->
         suggestions =
-          ai_suggestions
-          |> Enum.filter(&valid_ai_suggestion?(&1, @standard_field_labels))
-          |> Enum.with_index(1)
-          |> Enum.map(fn {suggestion, idx} ->
-            field = normalize_field_key(suggestion.field)
-            label = Map.get(@standard_field_labels, field, field)
-
-            %{
-              id: suggestion_id(field, idx, Map.get(suggestion, :timestamp), suggestion.value),
-              field: field,
-              mapped_field: field,
-              label: label,
-              mapped_label: label,
-              current_value: nil,
-              new_value: normalize_field_value(field, suggestion.value),
-              context: Map.get(suggestion, :context),
-              timestamp:
-                resolve_timestamp(
-                  Map.get(suggestion, :timestamp),
-                  Map.get(suggestion, :context),
-                  suggestion.value,
-                  transcript_index
-                ),
-              apply: true,
-              details_open: true,
-              mapping_open: false,
-              has_change: true
-            }
-          end)
-          |> dedupe_suggestions()
+          build_suggestions(ai_suggestions, @standard_field_labels, transcript_index,
+            contact: nil,
+            filter_unchanged: false,
+            id_timestamp_source: :ai,
+            id_value_source: :raw
+          )
 
         {:ok, suggestions}
 
@@ -186,24 +111,8 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
 
   def merge_with_contact(suggestions, contact) when is_list(suggestions) do
     suggestions
-    |> Enum.map(fn suggestion ->
-      field = Map.get(suggestion, :mapped_field) || Map.get(suggestion, :field)
-      current_value = normalize_field_value(field, contact_field_value(contact, field))
-      new_value = normalize_field_value(field, suggestion.new_value)
-      has_change = changed?(current_value, new_value)
-
-      suggestion
-      |> Map.put(:field, field)
-      |> Map.put(:mapped_field, field)
-      |> Map.put(:current_value, current_value)
-      |> Map.put(:new_value, new_value)
-      |> Map.put(:has_change, has_change)
-      |> Map.put(:apply, has_change)
-      |> Map.put_new(:details_open, true)
-      |> Map.put_new(:mapping_open, false)
-      |> Map.put_new(:mapped_label, Map.get(@standard_field_labels, field, field))
-    end)
-    |> Enum.filter(fn suggestion -> suggestion.has_change end)
+    |> Enum.map(&with_contact_values(&1, contact))
+    |> Enum.filter(& &1.has_change)
     |> dedupe_suggestions()
   end
 
@@ -276,98 +185,109 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     malformed_identifier_value?(field, label, value)
   end
 
-  defp valid_ai_suggestion?(suggestion, field_labels) when is_map(suggestion) do
-    field = normalize_field_key(Map.get(suggestion, :field))
-    value = Map.get(suggestion, :value)
-    label = Map.get(field_labels, field, field)
+  # Suggestion pipeline
 
-    is_binary(field) and is_binary(value) and String.trim(value) != "" and
-      not malformed_identifier_value?(field, label, value)
-  end
+  defp build_suggestions(ai_suggestions, field_labels, transcript_index, opts) do
+    contact = Keyword.get(opts, :contact)
+    filter_unchanged = Keyword.get(opts, :filter_unchanged, false)
+    id_timestamp_source = Keyword.get(opts, :id_timestamp_source, :resolved)
+    id_value_source = Keyword.get(opts, :id_value_source, :normalized)
 
-  defp valid_ai_suggestion?(_, _field_labels), do: false
-
-  defp malformed_identifier_value?(field, label, value) do
-    normalized_value = collapse_identifier(value)
-
-    normalized_value != "" and
-      normalized_value in Enum.reject(
-        [
-          collapse_identifier(field),
-          collapse_identifier(label)
-        ],
-        &(&1 in [nil, ""])
+    ai_suggestions
+    |> Enum.filter(&valid_ai_suggestion?(&1, field_labels))
+    |> Enum.with_index(1)
+    |> Enum.map(fn {suggestion, index} ->
+      build_suggestion(
+        suggestion,
+        index,
+        field_labels,
+        transcript_index,
+        contact,
+        id_timestamp_source,
+        id_value_source
       )
+    end)
+    |> maybe_filter_unchanged(filter_unchanged)
+    |> dedupe_suggestions()
   end
 
-  defp collapse_identifier(value) when is_binary(value) do
-    value
-    |> String.trim()
-    |> String.replace(~r/([a-z0-9])([A-Z])/, "\\1_\\2")
-    |> String.downcase()
-    |> String.replace(~r/__c$/, "")
-    |> String.replace(~r/[^a-z0-9]+/, "")
-  end
+  defp build_suggestion(
+         suggestion,
+         index,
+         field_labels,
+         transcript_index,
+         contact,
+         id_timestamp_source,
+         id_value_source
+       ) do
+    field = normalize_field_key(Map.get(suggestion, :field))
+    label = Map.get(field_labels, field, field)
+    raw_value = Map.get(suggestion, :value)
+    new_value = normalize_field_value(field, raw_value)
+    context = Map.get(suggestion, :context)
 
-  defp collapse_identifier(_), do: nil
+    current_value =
+      case contact do
+        map when is_map(map) -> normalize_field_value(field, contact_field_value(map, field))
+        _ -> nil
+      end
 
-  defp dedupe_suggestions(suggestions) do
-    {order, suggestions_by_key} =
-      Enum.reduce(suggestions, {[], %{}}, fn suggestion, {order, suggestions_by_key} ->
-        key = suggestion_key(suggestion)
+    resolved_timestamp =
+      resolve_timestamp(Map.get(suggestion, :timestamp), context, raw_value, transcript_index)
 
-        case suggestions_by_key do
-          %{^key => existing} ->
-            chosen =
-              if more_recent?(suggestion, existing), do: suggestion, else: existing
+    timestamp =
+      case id_timestamp_source do
+        :ai -> Map.get(suggestion, :timestamp)
+        :resolved -> resolved_timestamp
+      end
 
-            {order, Map.put(suggestions_by_key, key, chosen)}
+    id_value =
+      case id_value_source do
+        :raw -> raw_value
+        :normalized -> new_value
+      end
 
-          _ ->
-            {[key | order], Map.put(suggestions_by_key, key, suggestion)}
-        end
-      end)
+    has_change = if is_map(contact), do: changed?(current_value, new_value), else: true
 
-    order
-    |> Enum.reverse()
-    |> Enum.map(&Map.fetch!(suggestions_by_key, &1))
-  end
-
-  defp suggestion_key(suggestion) do
-    {
-      Map.get(suggestion, :mapped_field) || Map.get(suggestion, :field),
-      normalize_value(Map.get(suggestion, :new_value))
+    %{
+      id: suggestion_id(field, index, timestamp, id_value),
+      field: field,
+      mapped_field: field,
+      label: label,
+      mapped_label: label,
+      current_value: current_value,
+      new_value: new_value,
+      context: context,
+      timestamp: resolved_timestamp,
+      apply: true,
+      details_open: true,
+      mapping_open: false,
+      has_change: has_change
     }
   end
 
-  defp normalize_value(value) do
-    case normalize_for_compare(value) do
-      {:numeric, normalized} -> {:numeric, normalized}
-      {:text, normalized} -> {:text, String.downcase(normalized)}
-      nil -> nil
-    end
+  defp maybe_filter_unchanged(suggestions, true), do: Enum.filter(suggestions, & &1.has_change)
+  defp maybe_filter_unchanged(suggestions, false), do: suggestions
+
+  defp with_contact_values(suggestion, contact) do
+    field = Map.get(suggestion, :mapped_field) || Map.get(suggestion, :field)
+    current_value = normalize_field_value(field, contact_field_value(contact, field))
+    new_value = normalize_field_value(field, suggestion.new_value)
+    has_change = changed?(current_value, new_value)
+
+    suggestion
+    |> Map.put(:field, field)
+    |> Map.put(:mapped_field, field)
+    |> Map.put(:current_value, current_value)
+    |> Map.put(:new_value, new_value)
+    |> Map.put(:has_change, has_change)
+    |> Map.put(:apply, has_change)
+    |> Map.put_new(:details_open, true)
+    |> Map.put_new(:mapping_open, false)
+    |> Map.put_new(:mapped_label, Map.get(@standard_field_labels, field, field))
   end
 
-  defp more_recent?(left, right) do
-    timestamp_seconds(left) >= timestamp_seconds(right)
-  end
-
-  defp timestamp_seconds(%{timestamp: timestamp}) when is_binary(timestamp) do
-    case String.split(timestamp, ":") do
-      [minutes, seconds] ->
-        with {minutes, ""} <- Integer.parse(minutes),
-             {seconds, ""} <- Integer.parse(seconds) do
-          minutes * 60 + seconds
-        else
-          _ -> -1
-        end
-
-      _ ->
-        -1
-    end
-  end
-
-  defp timestamp_seconds(_), do: -1
+  # Field metadata helpers
 
   defp fetch_describe_fields(credential) do
     case api_impl().describe_contact_fields(credential) do
@@ -394,7 +314,6 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
       name = normalize_field_key(Map.get(field, :name) || Map.get(field, "name"))
       label = Map.get(field, :label) || Map.get(field, "label") || name
       type = Map.get(field, :type) || Map.get(field, "type")
-
       options = picklist_options(field)
 
       if is_binary(name) and is_binary(label) do
@@ -438,6 +357,111 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
   end
+
+  # Validation + dedupe
+
+  defp valid_ai_suggestion?(suggestion, field_labels) when is_map(suggestion) do
+    field = normalize_field_key(Map.get(suggestion, :field))
+    value = Map.get(suggestion, :value)
+    label = Map.get(field_labels, field, field)
+
+    is_binary(field) and is_binary(value) and String.trim(value) != "" and
+      not malformed_identifier_value?(field, label, value)
+  end
+
+  defp valid_ai_suggestion?(_, _field_labels), do: false
+
+  defp malformed_identifier_value?(field, label, value) do
+    normalized_value = collapse_identifier(value)
+
+    normalized_value != "" and
+      normalized_value in Enum.reject(
+        [
+          collapse_identifier(field),
+          collapse_identifier(label)
+        ],
+        &(&1 in [nil, ""])
+      )
+  end
+
+  defp collapse_identifier(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> String.replace(~r/([a-z0-9])([A-Z])/, "\\1_\\2")
+    |> String.downcase()
+    |> String.replace(~r/__c$/, "")
+    |> String.replace(~r/[^a-z0-9]+/, "")
+  end
+
+  defp collapse_identifier(_), do: nil
+
+  # When duplicate field/value suggestions exist, keep the latest timestamped suggestion.
+  defp dedupe_suggestions(suggestions) do
+    {order, suggestions_by_key} =
+      Enum.reduce(suggestions, {[], %{}}, fn suggestion, {order, suggestions_by_key} ->
+        key = suggestion_key(suggestion)
+
+        case suggestions_by_key do
+          %{^key => existing} ->
+            chosen = if more_recent?(suggestion, existing), do: suggestion, else: existing
+            {order, Map.put(suggestions_by_key, key, chosen)}
+
+          _ ->
+            {[key | order], Map.put(suggestions_by_key, key, suggestion)}
+        end
+      end)
+
+    order
+    |> Enum.reverse()
+    |> Enum.map(&Map.fetch!(suggestions_by_key, &1))
+  end
+
+  defp suggestion_key(suggestion) do
+    {
+      Map.get(suggestion, :mapped_field) || Map.get(suggestion, :field),
+      normalize_value(Map.get(suggestion, :new_value))
+    }
+  end
+
+  defp normalize_value(value) do
+    case normalize_for_compare(value) do
+      {:numeric, normalized} -> {:numeric, normalized}
+      {:text, normalized} -> {:text, String.downcase(normalized)}
+      nil -> nil
+    end
+  end
+
+  defp more_recent?(left, right), do: timestamp_seconds(left) >= timestamp_seconds(right)
+
+  defp timestamp_seconds(%{timestamp: timestamp}) when is_binary(timestamp) do
+    case String.split(timestamp, ":") do
+      [minutes, seconds] ->
+        with {minutes, ""} <- Integer.parse(minutes),
+             {seconds, ""} <- Integer.parse(seconds) do
+          minutes * 60 + seconds
+        else
+          _ -> -1
+        end
+
+      _ ->
+        -1
+    end
+  end
+
+  defp timestamp_seconds(_), do: -1
+
+  defp normalize_for_compare(nil), do: nil
+
+  defp normalize_for_compare(value) do
+    value = normalize_for_display(value)
+
+    case Decimal.parse(value) do
+      {decimal, ""} -> {:numeric, decimal |> Decimal.normalize() |> Decimal.to_string(:normal)}
+      _ -> {:text, value}
+    end
+  end
+
+  # Transcript/timestamp resolution
 
   defp build_transcript_index(%{meeting_transcript: %{content: content}}) when is_map(content) do
     segments =
@@ -514,10 +538,8 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     end)
   end
 
-  defp build_word_entries(segment_entries) do
-    segment_entries
-    |> Enum.flat_map(&Map.get(&1, :words, []))
-  end
+  defp build_word_entries(segment_entries),
+    do: Enum.flat_map(segment_entries, &Map.get(&1, :words, []))
 
   defp segment_seconds(segment, words) do
     word_seconds =
@@ -539,6 +561,7 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     end
   end
 
+  # Timestamp precedence: exact phrase match in words, then segment-level match, then AI fallback.
   defp resolve_timestamp(ai_timestamp, context, value, transcript_index) do
     context_query = normalize_text(context)
     value_query = normalize_text(value)
@@ -553,12 +576,9 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
       |> Enum.filter(&is_number/1)
       |> Enum.max(fn -> nil end)
 
-    cond do
-      is_number(resolved_seconds) ->
-        format_mmss(resolved_seconds)
-
-      true ->
-        normalize_timestamp(ai_timestamp)
+    case resolved_seconds do
+      seconds when is_number(seconds) -> format_mmss(seconds)
+      _ -> normalize_timestamp(ai_timestamp)
     end
   end
 
@@ -640,11 +660,6 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     "#{String.pad_leading(Integer.to_string(minutes), 2, "0")}:#{String.pad_leading(Integer.to_string(secs), 2, "0")}"
   end
 
-  defp suggestion_id(field, index, timestamp, new_value) do
-    hash = :erlang.phash2({field, timestamp, new_value, index})
-    "sf-suggestion-#{index}-#{hash}"
-  end
-
   defp extract_seconds(%{} = value) do
     relative = map_get(value, "relative") || map_get(value, :relative)
 
@@ -668,10 +683,6 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     |> String.trim()
   end
 
-  defp maybe_downcase_email(nil, _field), do: nil
-  defp maybe_downcase_email(value, "email"), do: String.downcase(value)
-  defp maybe_downcase_email(value, _field), do: value
-
   defp tokenize(value) do
     value
     |> normalize_text()
@@ -686,6 +697,17 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
     |> tokenize()
     |> Enum.map(fn token -> %{token: token, seconds: seconds} end)
   end
+
+  # Low-level utilities
+
+  defp suggestion_id(field, index, timestamp, new_value) do
+    hash = :erlang.phash2({field, timestamp, new_value, index})
+    "sf-suggestion-#{index}-#{hash}"
+  end
+
+  defp maybe_downcase_email(nil, _field), do: nil
+  defp maybe_downcase_email(value, "email"), do: String.downcase(value)
+  defp maybe_downcase_email(value, _field), do: value
 
   defp get_standard_contact_field(contact, field) when is_binary(field) do
     case field do
@@ -706,20 +728,6 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Suggestions do
   end
 
   defp get_standard_contact_field(_, _), do: nil
-
-  defp normalize_for_compare(nil), do: nil
-
-  defp normalize_for_compare(value) do
-    value = normalize_for_display(value)
-
-    case Decimal.parse(value) do
-      {decimal, ""} ->
-        {:numeric, decimal |> Decimal.normalize() |> Decimal.to_string(:normal)}
-
-      _ ->
-        {:text, value}
-    end
-  end
 
   defp map_get(map, key) when is_map(map) do
     Map.get(map, key) ||
