@@ -37,7 +37,7 @@ defmodule SocialScribe.SalesforceSuggestions do
   }
 
   @default_mapping_fields Enum.map(@standard_field_labels, fn {name, label} ->
-                            %{name: name, label: label, type: "string"}
+                            %{name: name, label: label, type: "string", options: []}
                           end)
 
   def default_mapping_fields, do: @default_mapping_fields
@@ -216,11 +216,17 @@ defmodule SocialScribe.SalesforceSuggestions do
   def contact_field_value(contact, field) when is_map(contact) do
     case get_standard_contact_field(contact, field) do
       nil ->
-        contact
-        |> map_get(:fields)
-        |> case do
-          map when is_map(map) -> map_get(map, field)
-          _ -> nil
+        case map_get(contact, field) do
+          nil ->
+            contact
+            |> map_get(:fields)
+            |> case do
+              map when is_map(map) -> map_get(map, field)
+              _ -> nil
+            end
+
+          value ->
+            value
         end
 
       value ->
@@ -389,8 +395,10 @@ defmodule SocialScribe.SalesforceSuggestions do
       label = Map.get(field, :label) || Map.get(field, "label") || name
       type = Map.get(field, :type) || Map.get(field, "type")
 
+      options = picklist_options(field)
+
       if is_binary(name) and is_binary(label) do
-        [%{name: name, label: label, type: type} | acc]
+        [%{name: name, label: label, type: type, options: options} | acc]
       else
         acc
       end
@@ -413,6 +421,22 @@ defmodule SocialScribe.SalesforceSuggestions do
       end)
 
     Map.merge(@standard_field_labels, describe_labels)
+  end
+
+  defp picklist_options(field) do
+    field
+    |> Map.get(:picklist_values, Map.get(field, "picklist_values", []))
+    |> List.wrap()
+    |> Enum.map(fn option ->
+      case option do
+        %{value: value} when is_binary(value) -> String.trim(value)
+        %{"value" => value} when is_binary(value) -> String.trim(value)
+        _ -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
   end
 
   defp build_transcript_index(%{meeting_transcript: %{content: content}}) when is_map(content) do

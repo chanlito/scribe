@@ -50,7 +50,7 @@ defmodule SocialScribeWeb.ModalComponents do
             aria-haspopup="listbox"
             aria-expanded={to_string(@open)}
             aria-controls={"#{@id}-listbox"}
-            class="relative w-full bg-white border border-hubspot-input rounded-lg pl-1.5 pr-10 py-[5px] text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            class="relative w-full bg-white border border-hubspot-input rounded-lg pl-1.5 pr-10 py-[5px] text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
           >
             <span class="flex items-center">
               <.avatar
@@ -83,7 +83,7 @@ defmodule SocialScribeWeb.ModalComponents do
               aria-autocomplete="list"
               aria-expanded={to_string(@open)}
               aria-controls={"#{@id}-listbox"}
-              class="w-full bg-white border border-hubspot-input rounded-lg pl-2 pr-10 py-[5px] text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              class="w-full bg-white border border-hubspot-input rounded-lg pl-2 pr-10 py-[5px] text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             />
             <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
               <%= if @loading do %>
@@ -114,12 +114,17 @@ defmodule SocialScribeWeb.ModalComponents do
           >
             Clear selection
           </button>
-          <div :if={@loading} class="px-4 py-2 text-sm text-gray-500">
+          <div
+            :if={@loading}
+            class="px-4 py-2 text-sm text-slate-500"
+            role="status"
+            aria-live="polite"
+          >
             Searching...
           </div>
           <div
             :if={!@loading && Enum.empty?(@contacts) && @query != ""}
-            class="px-4 py-2 text-sm text-gray-500"
+            class="px-4 py-2 text-sm text-slate-500"
           >
             No contacts found
           </div>
@@ -496,18 +501,21 @@ defmodule SocialScribeWeb.ModalComponents do
 
   def modal_footer(assigns) do
     ~H"""
-    <div class={["relative pt-6 mt-6 flex items-center justify-between -mx-10 px-10", @class]}>
+    <div class={[
+      "relative pt-6 mt-6 flex flex-wrap items-center justify-between gap-3 -mx-4 px-4 sm:-mx-10 sm:px-10",
+      @class
+    ]}>
       <div class="absolute left-0 right-0 top-0 border-t border-slate-200"></div>
-      <div :if={@info_text} class="text-xs text-slate-500">
+      <div :if={@info_text} class="text-xs text-slate-500 flex-1 min-w-[12rem]">
         {@info_text}
       </div>
       <div :if={!@info_text}></div>
-      <div class="flex space-x-3">
+      <div class="flex flex-wrap justify-end gap-3 w-full sm:w-auto">
         <button
           :if={@cancel_patch}
           type="button"
           phx-click={Phoenix.LiveView.JS.patch(@cancel_patch)}
-          class="px-5 py-2.5 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-hubspot-cancel bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          class="min-h-11 px-5 py-2.5 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-hubspot-cancel bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           Cancel
         </button>
@@ -515,7 +523,7 @@ defmodule SocialScribeWeb.ModalComponents do
           :if={@cancel_click}
           type="button"
           phx-click={@cancel_click}
-          class="px-5 py-2.5 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-hubspot-cancel bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          class="min-h-11 px-5 py-2.5 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-hubspot-cancel bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           Cancel
         </button>
@@ -523,7 +531,7 @@ defmodule SocialScribeWeb.ModalComponents do
           type="submit"
           disabled={@loading || @disabled}
           class={
-            "px-5 py-2.5 rounded-lg shadow-sm text-sm font-medium text-white " <>
+            "min-h-11 px-5 py-2.5 rounded-lg shadow-sm text-sm font-medium text-white " <>
               @submit_class <> " disabled:opacity-50"
           }
         >
@@ -569,7 +577,9 @@ defmodule SocialScribeWeb.ModalComponents do
 
   def inline_error(assigns) do
     ~H"""
-    <p class={["text-red-600 text-sm", @class]}>{@message}</p>
+    <p class={["text-red-600 text-sm", @class]} role="alert" aria-live="assertive">
+      {@message}
+    </p>
     """
   end
 

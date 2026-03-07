@@ -372,6 +372,7 @@ defmodule SocialScribe.SalesforceApi do
               name: field["name"],
               label: field["label"] || field["name"],
               type: field["type"],
+              picklist_values: normalize_picklist_values(field["picklistValues"]),
               createable: field["createable"] == true,
               updateable: field["updateable"] == true
             }
@@ -393,6 +394,23 @@ defmodule SocialScribe.SalesforceApi do
       Map.put(acc, field.name, field.type)
     end)
   end
+
+  defp normalize_picklist_values(values) when is_list(values) do
+    values
+    |> Enum.filter(&is_map/1)
+    |> Enum.filter(fn value -> Map.get(value, "active") != false end)
+    |> Enum.map(fn value ->
+      picklist_value = Map.get(value, "value")
+      picklist_label = Map.get(value, "label") || picklist_value
+
+      if is_binary(picklist_value) and String.trim(picklist_value) != "" do
+        %{value: picklist_value, label: picklist_label}
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp normalize_picklist_values(_), do: []
 
   @doc false
   def normalize_update_value(value, salesforce_type) do

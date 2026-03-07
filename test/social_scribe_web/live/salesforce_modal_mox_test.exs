@@ -167,6 +167,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
 
       assert has_element?(view, "#salesforce-modal-wrapper")
       assert render(view) =~ "Update Salesforce"
+      assert render(view) =~ "1 contact, 1 field selected for update"
     end
 
     test "shows friendly message when Gemini rate limit is hit", %{conn: conn, meeting: meeting} do
@@ -284,14 +285,23 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
                "button[phx-click='toggle_suggestion_details'][aria-label='Hide details']"
              )
 
+      assert has_element?(
+               view,
+               "button[phx-click='toggle_suggestion_details'][aria-expanded='true'][aria-controls^='suggestion-details-']"
+             )
+
       assert has_element?(view, "input[name^='values[']")
       assert has_element?(view, "input[name^='values['][value='555-1234']")
+      assert has_element?(view, "input[aria-label='Current value for Phone']")
+      assert has_element?(view, "input[aria-label='New value for Phone'][phx-debounce='300']")
+      assert render(view) =~ "sm:grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)]"
 
       view
       |> element("button[phx-click='toggle_suggestion_details']")
       |> render_click()
 
       refute has_element?(view, "input[name^='values[']")
+      refute has_element?(view, "div[id^='suggestion-details-']")
 
       assert has_element?(
                view,
@@ -349,12 +359,14 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
 
       :timer.sleep(300)
 
+      html = render(view)
+      row_id = row_id_for_mapped_field(html, "firstname")
+
       view
-      |> element("button[phx-click='toggle_suggestion_mapping']")
+      |> element("button[phx-click='toggle_suggestion_mapping'][phx-value-id='#{row_id}']")
       |> render_click()
 
-      html = render(view)
-      [row_id] = suggestion_ids(html)
+      assert has_element?(view, "select[aria-label='Mapped Salesforce field for First Name']")
 
       view
       |> element("form[phx-submit='apply_updates']")
@@ -447,6 +459,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         |> render_change(params)
 
       assert has_element?(view, "#salesforce-modal-wrapper")
+      assert has_element?(view, "p[role='alert'][aria-live='assertive']")
     end
 
     test "invalid update submission keeps the Salesforce modal open", %{
@@ -509,7 +522,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
 
       :timer.sleep(300)
 
-      [row_id] = suggestion_ids(render(view))
+      row_id = row_id_for_mapped_field(render(view), "Account_Value__c")
 
       view
       |> element("form[phx-submit='apply_updates']")
@@ -525,6 +538,336 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
       assert html =~ "Update in Salesforce"
       assert html =~ "Account Value"
       assert has_element?(view, "#salesforce-modal-wrapper")
+    end
+
+    test "state-only suggestion renders paired state and country rows", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      search_contact = %{
+        id: "003123",
+        firstname: "Ani",
+        lastname: "Harris",
+        email: "ani@example.com",
+        phone: nil,
+        mailingstate: nil,
+        mailingcountry: nil,
+        display_name: "Ani Harris",
+        fields: %{}
+      }
+
+      full_contact = %{search_contact | mailingcountry: "Cambodia"}
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [search_contact]} end)
+      |> expect(:describe_contact_fields, fn _credential ->
+        {:ok,
+         [
+           %{name: "MailingState", label: "Mailing State/Province", type: "string"},
+           %{name: "MailingCountry", label: "Mailing Country/Territory", type: "string"}
+         ]}
+      end)
+      |> expect(:get_contact, fn _credential, "003123" -> {:ok, full_contact} end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields ->
+        {:ok,
+         [
+           %{
+             field: "mailingstate",
+             value: "California",
+             context: "Customer moved to California",
+             timestamp: "00:42"
+           }
+         ]}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "Ani"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='003123']")
+      |> render_click()
+
+      :timer.sleep(300)
+
+      html = render(view)
+      country_row_id = row_id_for_mapped_field(html, "mailingcountry")
+
+      assert html =~ "Mailing State/Province"
+      assert html =~ "Mailing Country/Territory"
+
+      refute has_element?(view, "input[id='suggestion-current-value-#{country_row_id}']")
+
+      assert has_element?(
+               view,
+               "button[phx-click='toggle_suggestion_details'][phx-value-id='#{country_row_id}'][aria-expanded='false']"
+             )
+
+      refute html =~
+               "* Mailing State/Province and Mailing Country/Territory depend on each other. Update both together."
+
+      view
+      |> element(
+        "button[phx-click='toggle_suggestion_details'][phx-value-id='#{country_row_id}']"
+      )
+      |> render_click()
+
+      html = render(view)
+
+      assert html =~
+               "* Mailing State/Province and Mailing Country/Territory depend on each other. Update both together."
+
+      assert has_element?(view, "p.text-xs.text-destructive")
+    end
+
+    test "paired checkboxes mirror when checking either row", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "003123",
+        firstname: "Ani",
+        lastname: "Harris",
+        email: "ani@example.com",
+        phone: nil,
+        mailingstate: nil,
+        mailingcountry: nil,
+        display_name: "Ani Harris",
+        fields: %{}
+      }
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+      |> expect(:describe_contact_fields, fn _credential ->
+        {:ok,
+         [
+           %{name: "MailingState", label: "Mailing State/Province", type: "string"},
+           %{name: "MailingCountry", label: "Mailing Country/Territory", type: "string"}
+         ]}
+      end)
+      |> expect(:get_contact, fn _credential, "003123" -> {:ok, mock_contact} end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields ->
+        {:ok,
+         [
+           %{
+             field: "mailingstate",
+             value: "California",
+             context: "Customer moved to California",
+             timestamp: "00:42"
+           }
+         ]}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "Ani"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='003123']")
+      |> render_click()
+
+      :timer.sleep(300)
+
+      html = render(view)
+      state_row_id = row_id_for_mapped_field(html, "mailingstate")
+      country_row_id = row_id_for_mapped_field(html, "mailingcountry")
+
+      refute is_nil(state_row_id)
+      refute is_nil(country_row_id)
+
+      _html =
+        view
+        |> element("form[phx-submit='apply_updates']")
+        |> render_change(%{
+          "_target" => ["apply", state_row_id],
+          "apply" => %{state_row_id => "1"},
+          "values" => %{state_row_id => "California", country_row_id => ""},
+          "mapped_fields" => %{state_row_id => "mailingstate", country_row_id => "mailingcountry"}
+        })
+
+      assert render(view) =~ "1 contact, 2 fields selected for update"
+
+      _html =
+        view
+        |> element("form[phx-submit='apply_updates']")
+        |> render_change(%{
+          "_target" => ["apply", country_row_id],
+          "apply" => %{country_row_id => "1"},
+          "values" => %{state_row_id => "California", country_row_id => ""},
+          "mapped_fields" => %{state_row_id => "mailingstate", country_row_id => "mailingcountry"}
+        })
+
+      assert render(view) =~ "1 contact, 2 fields selected for update"
+    end
+
+    test "paired submit sends both state and country updates when values changed", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "003123",
+        firstname: "Ani",
+        lastname: "Harris",
+        email: "ani@example.com",
+        phone: nil,
+        mailingstate: nil,
+        mailingcountry: nil,
+        display_name: "Ani Harris",
+        fields: %{}
+      }
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+      |> expect(:describe_contact_fields, fn _credential ->
+        {:ok,
+         [
+           %{name: "MailingState", label: "Mailing State/Province", type: "string"},
+           %{name: "MailingCountry", label: "Mailing Country/Territory", type: "string"}
+         ]}
+      end)
+      |> expect(:get_contact, fn _credential, "003123" -> {:ok, mock_contact} end)
+      |> expect(:update_contact, fn _credential, "003123", updates ->
+        assert updates == %{"mailingstate" => "California", "mailingcountry" => "United States"}
+        {:ok, %{mock_contact | mailingstate: "California", mailingcountry: "United States"}}
+      end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields ->
+        {:ok,
+         [
+           %{
+             field: "mailingstate",
+             value: "California",
+             context: "Customer moved to California",
+             timestamp: "00:42"
+           }
+         ]}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "Ani"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='003123']")
+      |> render_click()
+
+      :timer.sleep(300)
+
+      html = render(view)
+      state_row_id = row_id_for_mapped_field(html, "mailingstate")
+      country_row_id = row_id_for_mapped_field(html, "mailingcountry")
+
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_submit(%{
+        "apply" => %{state_row_id => "1"},
+        "values" => %{state_row_id => "California", country_row_id => "United States"},
+        "mapped_fields" => %{state_row_id => "mailingstate", country_row_id => "mailingcountry"}
+      })
+
+      :timer.sleep(200)
+      html = render(view)
+      assert html =~ "Successfully updated 2 field(s) in Salesforce"
+    end
+
+    test "invalid state/country pair submission surfaces Salesforce error", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "003123",
+        firstname: "Ani",
+        lastname: "Harris",
+        email: "ani@example.com",
+        phone: nil,
+        mailingstate: nil,
+        mailingcountry: nil,
+        display_name: "Ani Harris",
+        fields: %{}
+      }
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+      |> expect(:describe_contact_fields, fn _credential ->
+        {:ok,
+         [
+           %{name: "MailingState", label: "Mailing State/Province", type: "string"},
+           %{name: "MailingCountry", label: "Mailing Country/Territory", type: "string"}
+         ]}
+      end)
+      |> expect(:get_contact, fn _credential, "003123" -> {:ok, mock_contact} end)
+      |> expect(:update_contact, fn _credential, "003123", %{"mailingstate" => "California"} ->
+        {:error,
+         {:api_error, 400,
+          [
+            %{
+              "errorCode" => "FIELD_INTEGRITY_EXCEPTION",
+              "message" =>
+                "A country/territory must be specified before specifying a state value for field: Mailing State/Province"
+            }
+          ]}}
+      end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields ->
+        {:ok,
+         [
+           %{
+             field: "mailingstate",
+             value: "California",
+             context: "Customer moved to California",
+             timestamp: "00:42"
+           }
+         ]}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "Ani"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='003123']")
+      |> render_click()
+
+      :timer.sleep(300)
+
+      html = render(view)
+      state_row_id = row_id_for_mapped_field(html, "mailingstate")
+      country_row_id = row_id_for_mapped_field(html, "mailingcountry")
+
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_submit(%{
+        "apply" => %{state_row_id => "1"},
+        "values" => %{state_row_id => "California", country_row_id => ""},
+        "mapped_fields" => %{state_row_id => "mailingstate", country_row_id => "mailingcountry"}
+      })
+
+      :timer.sleep(200)
+      html = render(view)
+
+      assert html =~ "Salesforce rejected the update: FIELD_INTEGRITY_EXCEPTION"
     end
 
     test "malformed field-name suggestions do not render in the Salesforce modal", %{
@@ -601,7 +944,77 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
       refute html =~ "mailingpostalcode"
       refute html =~ "account_value__c"
       refute html =~ "retirement_savings_rate__c"
-      assert html =~ "No update suggestions found from this meeting."
+      assert html =~ "Account Value"
+      refute html =~ "No update suggestions found from this meeting."
+    end
+
+    test "renders all existing Salesforce fields even when AI returns no suggestions", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        "OwnerId" => "005XX000001234A",
+        id: "003123",
+        firstname: "Ani",
+        lastname: "Harris",
+        email: "ani@example.com",
+        phone: "555-1212",
+        title: "VP Sales",
+        department: "Revenue",
+        mailingcity: "Phnom Penh",
+        mailingcountry: "Cambodia",
+        display_name: "Ani Harris",
+        fields: %{}
+      }
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+      |> expect(:describe_contact_fields, fn _credential ->
+        {:ok,
+         [
+           %{name: "Phone", label: "Phone", type: "string"},
+           %{name: "Title", label: "Title", type: "string"},
+           %{name: "Department", label: "Department", type: "string"},
+           %{name: "MailingCity", label: "Mailing City", type: "string"},
+           %{name: "MailingCountry", label: "Mailing Country/Territory", type: "string"},
+           %{name: "OwnerId", label: "Owner ID", type: "reference"}
+         ]}
+      end)
+      |> expect(:get_contact, fn _credential, "003123" -> {:ok, mock_contact} end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields -> {:ok, []} end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "Ani"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='003123']")
+      |> render_click()
+
+      :timer.sleep(300)
+      html = render(view)
+
+      assert html =~ "Phone"
+      assert html =~ "Title"
+      assert html =~ "Department"
+      assert html =~ "Mailing City"
+      assert html =~ "Mailing Country/Territory"
+      refute html =~ "Owner ID"
+      phone_row_id = row_id_for_mapped_field(html, "phone")
+      assert has_element?(view, "input[id='suggestion-apply-#{phone_row_id}']:not([disabled])")
+
+      assert has_element?(
+               view,
+               "button[phx-click='toggle_suggestion_details'][aria-expanded='false']"
+             )
+
+      refute html =~ "No update suggestions found from this meeting."
     end
   end
 
@@ -711,5 +1124,17 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
     Regex.scan(~r/mapped_fields\[([^\]]+)\]/, html, capture: :all_but_first)
     |> List.flatten()
     |> Enum.uniq()
+  end
+
+  defp row_id_for_mapped_field(html, mapped_field) do
+    Regex.run(
+      ~r/name=\"mapped_fields\[([^\]]+)\]\"[^>]*value=\"#{mapped_field}\"/s,
+      html,
+      capture: :all_but_first
+    )
+    |> case do
+      [row_id] -> row_id
+      _ -> nil
+    end
   end
 end

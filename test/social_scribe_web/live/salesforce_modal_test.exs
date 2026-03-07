@@ -46,6 +46,12 @@ defmodule SocialScribeWeb.SalesforceModalTest do
       {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/salesforce")
 
       assert has_element?(view, "select[name='credential_id']")
+      assert has_element?(view, "label[for='salesforce-modal-wrapper-credential-select']")
+
+      assert has_element?(
+               view,
+               "select#salesforce-modal-wrapper-credential-select[name='credential_id']"
+             )
     end
   end
 

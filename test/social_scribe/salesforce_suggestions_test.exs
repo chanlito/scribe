@@ -149,6 +149,33 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
       assert hd(result).has_change == true
     end
 
+    test "reads existing value for custom Salesforce field from top-level contact map" do
+      suggestions = [
+        %{
+          field: "Client_Name__c",
+          label: "Client Name",
+          current_value: nil,
+          new_value: "ACME Holdings",
+          context: "Client name was updated",
+          timestamp: "01:19",
+          apply: true,
+          has_change: true
+        }
+      ]
+
+      contact = %{
+        "Client_Name__c" => "ACME Corp",
+        id: "003123",
+        fields: %{}
+      }
+
+      result = SalesforceSuggestions.merge_with_contact(suggestions, contact)
+
+      assert length(result) == 1
+      assert hd(result).current_value == "ACME Corp"
+      assert hd(result).has_change == true
+    end
+
     test "formats scientific numeric existing values into plain numbers" do
       suggestions = [
         %{
@@ -312,6 +339,56 @@ defmodule SocialScribe.SalesforceSuggestionsTest do
                SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
 
       assert suggestion.timestamp == "02:10"
+    end
+
+    test "includes Salesforce picklist options in mapping fields" do
+      user = user_fixture()
+      credential = salesforce_credential_fixture(%{user_id: user.id})
+
+      meeting = %{
+        meeting_transcript: %{content: %{"data" => []}}
+      }
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:describe_contact_fields, fn _credential ->
+        {:ok,
+         [
+           %{name: "MailingState", label: "Mailing State/Province", type: "string"},
+           %{
+             name: "MailingCountry",
+             label: "Mailing Country/Territory",
+             type: "picklist",
+             picklist_values: [
+               %{value: "United States", label: "United States"},
+               %{value: "Canada", label: "Canada"}
+             ]
+           }
+         ]}
+      end)
+      |> expect(:get_contact, fn _credential, "003123" ->
+        {:ok, %{id: "003123", mailingstate: nil, mailingcountry: nil, fields: %{}}}
+      end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_salesforce_suggestions, fn _meeting, _custom_fields ->
+        {:ok,
+         [
+           %{
+             field: "mailingstate",
+             value: "California",
+             context: "State update",
+             timestamp: "00:11"
+           }
+         ]}
+      end)
+
+      assert {:ok, %{mapping_fields: mapping_fields}} =
+               SalesforceSuggestions.generate_suggestions(credential, "003123", meeting)
+
+      assert Enum.find(mapping_fields, &(&1.name == "mailingcountry")).options == [
+               "United States",
+               "Canada"
+             ]
     end
 
     test "resolves different timestamps for multiple suggestions inside one transcript segment" do

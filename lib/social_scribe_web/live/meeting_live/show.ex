@@ -45,6 +45,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         |> assign(:user_has_automations, user_has_automations)
         |> assign(:hubspot_credential, hubspot_credential)
         |> assign(:salesforce_credentials, salesforce_credentials)
+        |> assign(:salesforce_modal_locked, false)
         |> assign(
           :follow_up_email_form,
           to_form(%{
@@ -174,10 +175,11 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   @impl true
   def handle_info({:generate_salesforce_suggestions, contact, meeting, credential}, socket) do
     case SalesforceSuggestions.generate_suggestions(credential, contact.id, meeting) do
-      {:ok, %{suggestions: suggestions, mapping_fields: mapping_fields}} ->
+      {:ok, %{contact: full_contact, suggestions: suggestions, mapping_fields: mapping_fields}} ->
         send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
           id: "salesforce-modal",
           step: :suggestions,
+          selected_contact: full_contact,
           suggestions: suggestions,
           mapping_fields: mapping_fields,
           form_error: nil,
@@ -201,6 +203,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
       {:ok, _updated_contact} ->
         socket =
           socket
+          |> assign(:salesforce_modal_locked, false)
           |> put_flash(:info, "Successfully updated #{map_size(updates)} field(s) in Salesforce")
           |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")
 
@@ -210,11 +213,17 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
           id: "salesforce-modal",
           error: format_salesforce_update_error(reason),
-          loading: false
+          loading: false,
+          updating: false
         )
 
-        {:noreply, socket}
+        {:noreply, assign(socket, :salesforce_modal_locked, false)}
     end
+  end
+
+  @impl true
+  def handle_info({:salesforce_modal_lock, locked?}, socket) when is_boolean(locked?) do
+    {:noreply, assign(socket, :salesforce_modal_locked, locked?)}
   end
 
   defp normalize_contact(contact) do
