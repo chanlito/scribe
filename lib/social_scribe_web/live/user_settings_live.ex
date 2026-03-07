@@ -32,6 +32,7 @@ defmodule SocialScribeWeb.UserSettingsLive do
       |> assign(:linkedin_accounts, linkedin_accounts)
       |> assign(:facebook_accounts, facebook_accounts)
       |> assign(:salesforce_accounts, salesforce_accounts)
+      |> assign(:salesforce_disconnect_candidate, nil)
       |> assign(:hubspot_accounts, hubspot_accounts)
       |> assign_salesforce_connect_form("prod", "", nil)
       |> assign(:user_bot_preference, user_bot_preference)
@@ -113,6 +114,49 @@ defmodule SocialScribeWeb.UserSettingsLive do
 
       error ->
         {:noreply, assign_salesforce_connect_form(socket, env, domain, error)}
+    end
+  end
+
+  @impl true
+  def handle_event("confirm_disconnect_salesforce", %{"id" => credential_id}, socket) do
+    candidate =
+      Enum.find(socket.assigns.salesforce_accounts, fn account ->
+        to_string(account.id) == credential_id
+      end)
+
+    {:noreply, assign(socket, :salesforce_disconnect_candidate, candidate)}
+  end
+
+  @impl true
+  def handle_event("cancel_disconnect_salesforce", _params, socket) do
+    {:noreply, assign(socket, :salesforce_disconnect_candidate, nil)}
+  end
+
+  @impl true
+  def handle_event("disconnect_salesforce", %{"id" => credential_id}, socket) do
+    user = socket.assigns.current_user
+
+    case Accounts.delete_user_salesforce_credential(user, credential_id) do
+      {:ok, _credential} ->
+        salesforce_accounts = Accounts.list_user_credentials(user, provider: "salesforce")
+
+        {:noreply,
+         socket
+         |> assign(:salesforce_accounts, salesforce_accounts)
+         |> assign(:salesforce_disconnect_candidate, nil)
+         |> put_flash(:info, "Salesforce account disconnected successfully.")}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> assign(:salesforce_disconnect_candidate, nil)
+         |> put_flash(:error, "Salesforce account not found.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:salesforce_disconnect_candidate, nil)
+         |> put_flash(:error, "Failed to disconnect Salesforce account.")}
     end
   end
 

@@ -104,6 +104,14 @@
               <% end %>
             </p>
           </div>
+          <button
+            type="button"
+            phx-click="confirm_disconnect_salesforce"
+            phx-value-id={account.id}
+            class="inline-flex items-center px-4 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50"
+          >
+            Disconnect
+          </button>
         </li>
       </ul>
     <% else %>
@@ -342,6 +350,38 @@
     <% end %>
   </div>
 </div>
+
+<.modal
+  :if={@salesforce_disconnect_candidate}
+  id="salesforce-disconnect-modal"
+  show
+  on_cancel={JS.push("cancel_disconnect_salesforce")}
+>
+  <div class="space-y-4">
+    <h2 class="text-2xl font-semibold text-slate-700">Disconnect Salesforce account?</h2>
+    <p class="text-slate-600">
+      This removes the Salesforce credential from Social Scribe. You can reconnect at any time.
+    </p>
+
+    <div class="flex justify-end gap-3">
+      <button
+        type="button"
+        phx-click="cancel_disconnect_salesforce"
+        class="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        phx-click="disconnect_salesforce"
+        phx-value-id={@salesforce_disconnect_candidate.id}
+        class="px-4 py-2 rounded-md text-white bg-red-600 hover:bg-red-700"
+      >
+        Disconnect
+      </button>
+    </div>
+  </div>
+</.modal>
 
 <.modal
   :if={@live_action == :facebook_pages}
