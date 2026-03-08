@@ -15,7 +15,7 @@ Social Scribe is a powerful Elixir and Phoenix LiveView application designed to 
 * **Automated Meeting Transcription with Recall.ai:**
     * Toggle a switch for any calendar event to have an AI notetaker attend.
     * The app intelligently parses event details (description, location) to find Zoom or Google Meet links.
-    * Recall.ai bot joins meetings a configurable number of minutes before the start time (currently default, setting to be added to UI).
+    * Recall.ai bot joins meetings a configurable number of minutes before the start time (configurable in Settings, default is 2 minutes).
     * **Bot ID Management:** Adheres to challenge constraints by tracking individually created `bot_id`s and not using the general `/bots` endpoint.
     * **Polling for Media:** Implements a robust polling mechanism (via Oban) to check bot status and retrieve transcripts/media, as webhooks cannot be used with the shared API key.
 * **AI-Powered Content Generation (Google Gemini):**
@@ -70,14 +70,15 @@ Social Scribe is a powerful Elixir and Phoenix LiveView application designed to 
 
 ## 🛠 Tech Stack
 
-* **Backend:** Elixir, Phoenix LiveView
+* **Backend:** Elixir, Phoenix 1.7, Phoenix LiveView
+* **HTTP Server:** Bandit
 * **Database:** PostgreSQL
-* **Background Jobs:** Oban
-* **Authentication:** Ueberauth (for Google, LinkedIn, Facebook, HubSpot OAuth)
+* **Background Jobs:** Oban, Oban Web
+* **Authentication:** Ueberauth (Google, LinkedIn, Facebook, HubSpot, Salesforce)
 * **Meeting Transcription:** Recall.ai API
-* **AI Content Generation:** Google Gemini API (Flash models)
-* **Frontend:** Tailwind CSS, Heroicons (via `tailwind.config.js`)
-* **Progress Bar:** Topbar.js for page loading indication.
+* **AI Content Generation:** Google Gemini API (`gemini-2.5-flash-lite`)
+* **API/HTTP Clients:** Tesla, Finch
+* **Frontend:** Tailwind CSS, Heroicons, Topbar.js
 
 ---
 
@@ -87,10 +88,10 @@ Follow these steps to get SocialScribe running on your local machine.
 
 ### Prerequisites
 
-* Elixir
-* Erlang/OTP 
+* Elixir `~> 1.17`
+* Erlang/OTP (compatible with Elixir 1.17; OTP 26+ recommended)
 * PostgreSQL
-* Node.js (for Tailwind CSS asset compilation)
+* Node.js (required for Tailwind/esbuild asset tooling)
 
 ### Setup Instructions
 
@@ -109,7 +110,7 @@ Follow these steps to get SocialScribe running on your local machine.
     * Install Elixir dependencies (`mix deps.get`)
     * Create your database if it doesn't exist (`mix ecto.create`)
     * Run database migrations (`mix ecto.migrate`)
-    * Install Node.js dependencies for assets (`cd assets && npm install && cd ..`)
+    * Install asset tooling and build assets (`mix assets.setup && mix assets.build`)
 
 3.  **Configure Environment Variables:**
     You'll need to set up several API keys and OAuth credentials.
@@ -123,15 +124,21 @@ Follow these steps to get SocialScribe running on your local machine.
         * `LINKEDIN_CLIENT_ID`: Your LinkedIn App Client ID.
         * `LINKEDIN_CLIENT_SECRET`: Your LinkedIn App Client Secret.
         * `LINKEDIN_REDIRECT_URI`: `"http://localhost:4000/auth/linkedin/callback"`
-        * `FACEBOOK_APP_ID`: Your Facebook App ID.
-        * `FACEBOOK_APP_SECRET`: Your Facebook App Secret.
+        * `FACEBOOK_CLIENT_ID`: Your Facebook App ID.
+        * `FACEBOOK_CLIENT_SECRET`: Your Facebook App Secret.
         * `FACEBOOK_REDIRECT_URI`: `"http://localhost:4000/auth/facebook/callback"`
         * `HUBSPOT_CLIENT_ID`: Your HubSpot App Client ID.
         * `HUBSPOT_CLIENT_SECRET`: Your HubSpot App Client Secret.
-        * `HUBSPOT_REDIRECT_URI`: `"http://localhost:4000/auth/hubspot/callback"`
+        * `SALESFORCE_CLIENT_ID`: Your Salesforce Connected App Client ID.
+        * `SALESFORCE_CLIENT_SECRET`: Your Salesforce Connected App Client Secret.
+        * `SALESFORCE_REDIRECT_URI`: `"http://localhost:4000/auth/salesforce/callback"`
+        * `RECALL_REGION`: Optional Recall region.
 
 4.  **Start the Phoenix Server:**
     ```bash
+    set -a
+    source .env
+    set +a
     mix phx.server
     ```
     Or, to run inside IEx (Interactive Elixir):
