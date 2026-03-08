@@ -236,13 +236,21 @@ defmodule Ueberauth.Strategy.Salesforce do
   defp maybe_put_param(params, _key, nil), do: params
   defp maybe_put_param(params, key, value), do: Map.put(params, key, value)
 
-  defp oauth_redirect_uri(conn, "prod", _domain), do: callback_url(conn, env: "prod")
-  defp oauth_redirect_uri(conn, "sandbox", _domain), do: callback_url(conn, env: "sandbox")
+  defp oauth_redirect_uri(conn, env, domain) do
+    case Application.get_env(:ueberauth, Ueberauth.Strategy.Salesforce.OAuth, [])[:redirect_uri] do
+      nil -> oauth_redirect_uri_from_conn(conn, env, domain)
+      uri when is_binary(uri) and uri != "" -> uri
+      _ -> oauth_redirect_uri_from_conn(conn, env, domain)
+    end
+  end
 
-  defp oauth_redirect_uri(conn, "custom", domain),
+  defp oauth_redirect_uri_from_conn(conn, "prod", _domain), do: callback_url(conn, env: "prod")
+  defp oauth_redirect_uri_from_conn(conn, "sandbox", _domain), do: callback_url(conn, env: "sandbox")
+
+  defp oauth_redirect_uri_from_conn(conn, "custom", domain),
     do: callback_url(conn, env: "custom", domain: domain)
 
-  defp oauth_redirect_uri(conn, _env, _domain), do: callback_url(conn)
+  defp oauth_redirect_uri_from_conn(conn, _env, _domain), do: callback_url(conn)
 
   defp bad_request(conn, reason) do
     conn

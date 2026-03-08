@@ -35,7 +35,8 @@ config :ueberauth, Ueberauth.Strategy.Facebook.OAuth,
 
 config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
   client_id: System.get_env("SALESFORCE_CLIENT_ID"),
-  client_secret: System.get_env("SALESFORCE_CLIENT_SECRET")
+  client_secret: System.get_env("SALESFORCE_CLIENT_SECRET"),
+  redirect_uri: System.get_env("SALESFORCE_REDIRECT_URI")
 
 config :social_scribe, :recall_api_key, System.get_env("RECALL_API_KEY")
 config :social_scribe, :recall_region, System.get_env("RECALL_REGION")
@@ -120,6 +121,9 @@ if config_env() == :prod do
 
   config :ueberauth, Ueberauth.Strategy.Google.OAuth,
     redirect_uri: "https://" <> host <> "/auth/google/callback"
+
+  config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
+    redirect_uri: "https://" <> host <> "/auth/salesforce/callback"
 
   # ## SSL Support
   #
