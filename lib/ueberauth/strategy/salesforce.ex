@@ -41,6 +41,14 @@ defmodule Ueberauth.Strategy.Salesforce do
     end
   end
 
+  def handle_callback!(%Plug.Conn{params: %{"error" => error, "error_description" => description}} = conn) do
+    set_errors!(conn, [error(error, description)])
+  end
+
+  def handle_callback!(%Plug.Conn{params: %{"error" => error}} = conn) do
+    set_errors!(conn, [error(error, "Salesforce OAuth error")])
+  end
+
   def handle_callback!(%Plug.Conn{params: %{"code" => code} = params} = conn) do
     request_params = with_oauth_context_from_session(params, conn)
     conn = clear_oauth_context(conn)

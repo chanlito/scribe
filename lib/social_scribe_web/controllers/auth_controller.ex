@@ -169,6 +169,21 @@ defmodule SocialScribeWeb.AuthController do
     end
   end
 
+  def callback(
+        %{assigns: %{ueberauth_failure: failure, current_user: user}} = conn,
+        %{"provider" => provider}
+      )
+      when not is_nil(user) and provider in ["salesforce", "hubspot", "google", "linkedin", "facebook"] do
+    errors = Enum.map_join(failure.errors, ", ", & &1.message)
+    Logger.error("#{String.capitalize(provider)} OAuth failure for user #{user.id}: #{errors}")
+
+    user_message = friendly_oauth_error(provider, errors)
+
+    conn
+    |> put_flash(:error, user_message)
+    |> redirect(to: ~p"/dashboard/settings")
+  end
+
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
     Logger.info("Google OAuth Login")
     Logger.info(auth)
@@ -195,6 +210,24 @@ defmodule SocialScribeWeb.AuthController do
     conn
     |> put_flash(:error, "There was an error signing you in. Please try again.")
     |> redirect(to: ~p"/")
+  end
+
+  defp friendly_oauth_error("salesforce", errors) do
+    cond do
+      String.contains?(errors, "External client app is not installed") ->
+        "Could not connect Salesforce account: the Connected App is not authorized for this org. " <>
+          "Ask your Salesforce admin to set \"Permitted Users\" to \"All users may self-authorize\" in the Connected App settings."
+
+      String.contains?(errors, "invalid_client") ->
+        "Could not connect Salesforce account: invalid client credentials. Please check your Salesforce Connected App configuration."
+
+      true ->
+        "Could not connect Salesforce account: #{errors}"
+    end
+  end
+
+  defp friendly_oauth_error(provider, errors) do
+    "Could not connect #{String.capitalize(provider)} account: #{errors}"
   end
 
   defp salesforce_metadata_from_auth(auth) do

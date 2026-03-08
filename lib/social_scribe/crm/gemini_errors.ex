@@ -4,7 +4,7 @@ defmodule SocialScribe.CRM.GeminiErrors do
   """
 
   @doc """
-  Formats a suggestion error into a user-readable string.
+  Formats a suggestion error into a structured error map.
   Handles Gemini rate-limit (429), config errors, and generic fallbacks.
   """
   def format_suggestion_error({:api_error, 429, body}) do
@@ -17,16 +17,24 @@ defmodule SocialScribe.CRM.GeminiErrors do
         " Please retry shortly."
       end
 
-    "AI suggestion generation is rate-limited by Gemini quota." <>
-      retry_hint <>
-      " If this persists, check Gemini API quota/billing settings."
+    message =
+      "AI suggestion generation is rate-limited by Gemini quota." <>
+        retry_hint <>
+        " If this persists, check Gemini API quota/billing settings."
+
+    %{title: "Rate limit reached", errors: [%{code: "RATE_LIMITED", message: message}]}
   end
 
   def format_suggestion_error({:config_error, message}) when is_binary(message) do
-    "AI suggestion generation is unavailable: #{message}"
+    %{
+      title: "AI suggestions unavailable",
+      errors: [%{code: nil, message: "AI suggestion generation is unavailable: #{message}"}]
+    }
   end
 
-  def format_suggestion_error(reason), do: "Failed to generate suggestions: #{inspect(reason)}"
+  def format_suggestion_error(reason) do
+    %{title: "Failed to generate suggestions", errors: [%{code: nil, message: inspect(reason)}]}
+  end
 
   defp extract_retry_seconds(%{"error" => %{"details" => details}}) when is_list(details) do
     Enum.find_value(details, fn
