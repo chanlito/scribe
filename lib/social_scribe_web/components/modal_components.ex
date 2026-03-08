@@ -9,10 +9,109 @@ defmodule SocialScribeWeb.ModalComponents do
   import SocialScribeWeb.CoreComponents, only: [icon: 1]
 
   @doc """
+  Renders a custom account selector dropdown for switching between multiple
+  connected CRM accounts. Displays the selected credential's label and optional
+  sublabel (e.g. email and instance URL) and a listbox of available credentials.
+  """
+  attr :credentials, :list, required: true
+  attr :selected_credential, :map, default: nil
+  attr :label, :string, default: "Select Account"
+  attr :open, :boolean, default: false
+  attr :target, :any, default: nil
+  attr :id, :string, default: "account-select"
+  attr :credential_label_fn, :any, required: true
+  attr :credential_sublabel_fn, :any, default: nil
+
+  def account_select(assigns) do
+    ~H"""
+    <div class="space-y-2">
+      <label class="block text-sm font-medium text-slate-700">
+        {@label}
+      </label>
+      <div class="relative">
+        <button
+          type="button"
+          phx-click="toggle_account_dropdown"
+          phx-target={@target}
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded={to_string(@open)}
+          aria-controls={"#{@id}-listbox"}
+          class="relative w-full bg-white border border-hubspot-input rounded-lg pl-3 pr-10 py-[5px] text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+        >
+          <%= if @selected_credential do %>
+            <span class="block truncate text-slate-900">
+              {@credential_label_fn.(@selected_credential)}
+            </span>
+            <span
+              :if={@credential_sublabel_fn && @credential_sublabel_fn.(@selected_credential)}
+              class="block truncate text-xs text-slate-500"
+            >
+              {@credential_sublabel_fn.(@selected_credential)}
+            </span>
+          <% else %>
+            <span class="block text-slate-400">Select an account...</span>
+          <% end %>
+          <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+            <.icon name="hero-chevron-up-down" class="h-5 w-5 text-hubspot-icon" />
+          </span>
+        </button>
+
+        <div
+          :if={@open}
+          id={"#{@id}-listbox"}
+          role="listbox"
+          phx-click-away="close_account_dropdown"
+          phx-target={@target}
+          class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm"
+        >
+          <button
+            :for={credential <- @credentials}
+            type="button"
+            phx-click="select_account"
+            phx-value-credential_id={credential.id}
+            phx-target={@target}
+            role="option"
+            aria-selected={
+              to_string(@selected_credential && @selected_credential.id == credential.id)
+            }
+            class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+          >
+            <div class="min-w-0">
+              <div class={[
+                "text-sm truncate",
+                if(@selected_credential && @selected_credential.id == credential.id,
+                  do: "font-medium text-slate-900",
+                  else: "text-slate-700"
+                )
+              ]}>
+                {@credential_label_fn.(credential)}
+              </div>
+              <div
+                :if={@credential_sublabel_fn && @credential_sublabel_fn.(credential)}
+                class="text-xs text-slate-500 truncate"
+              >
+                {@credential_sublabel_fn.(credential)}
+              </div>
+            </div>
+            <.icon
+              :if={@selected_credential && @selected_credential.id == credential.id}
+              name="hero-check"
+              class="h-4 w-4 text-indigo-600 flex-shrink-0 ml-2"
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a searchable contact select box.
 
-  Shows selected contact with avatar, or search input when no contact selected.
-  Auto-searches when typing, dropdown shows results.
+  Shows the selected contact with their avatar and name, or a search input when
+  no contact is selected. Auto-searches as the user types and shows a dropdown
+  of results.
 
   ## Examples
 
@@ -51,7 +150,7 @@ defmodule SocialScribeWeb.ModalComponents do
             aria-haspopup="listbox"
             aria-expanded={to_string(@open)}
             aria-controls={"#{@id}-listbox"}
-            class="relative w-full bg-white border border-hubspot-input rounded-lg pl-1.5 pr-10 py-[5px] text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            class="relative w-full bg-white border border-hubspot-input rounded-lg pl-1.5 pr-10 py-3.5 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
           >
             <span class="flex items-center">
               <.avatar
@@ -74,7 +173,7 @@ defmodule SocialScribeWeb.ModalComponents do
               type="text"
               name="contact_query"
               value={@query}
-              placeholder="Search contacts..."
+              placeholder="Type a name or email..."
               phx-keyup="contact_search"
               phx-target={@target}
               phx-focus="open_contact_dropdown"
@@ -84,7 +183,7 @@ defmodule SocialScribeWeb.ModalComponents do
               aria-autocomplete="list"
               aria-expanded={to_string(@open)}
               aria-controls={"#{@id}-listbox"}
-              class="w-full bg-white border border-hubspot-input rounded-lg pl-2 pr-10 py-[5px] text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              class="w-full bg-white border border-hubspot-input rounded-lg pl-2 pr-10 py-3.5 text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             />
             <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
               <%= if @loading do %>

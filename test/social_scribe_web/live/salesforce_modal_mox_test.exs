@@ -459,7 +459,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
         |> render_change(params)
 
       assert has_element?(view, "#salesforce-modal-wrapper")
-      assert has_element?(view, "p[role='alert'][aria-live='assertive']")
+      assert has_element?(view, "div[role='alert'][aria-live='assertive']")
     end
 
     test "invalid update submission keeps the Salesforce modal open", %{
@@ -623,7 +623,7 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
       assert html =~
                "* Mailing State/Province and Mailing Country/Territory depend on each other. Update both together."
 
-      assert has_element?(view, "p.text-xs.text-destructive")
+      assert has_element?(view, "p.text-xs.text-rose-600")
     end
 
     test "paired checkboxes mirror when checking either row", %{
@@ -1016,6 +1016,173 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
              )
 
       refute html =~ "No update suggestions found from this meeting."
+    end
+  end
+
+  describe "credential label helpers" do
+    alias SocialScribe.CRM.Providers.Salesforce.Provider, as: SalesforceProvider
+
+    test "credential_label returns email when present" do
+      credential = %SocialScribe.Accounts.UserCredential{
+        email: "user@example.com",
+        uid: "sf_123",
+        metadata: %{}
+      }
+
+      assert SalesforceProvider.credential_label(credential) == "user@example.com"
+    end
+
+    test "credential_label falls back to uid when email is nil" do
+      credential = %SocialScribe.Accounts.UserCredential{
+        email: nil,
+        uid: "sf_fallback",
+        metadata: %{}
+      }
+
+      assert SalesforceProvider.credential_label(credential) == "sf_fallback"
+    end
+
+    test "credential_sublabel returns instance URL hostname" do
+      credential = %SocialScribe.Accounts.UserCredential{
+        email: "user@example.com",
+        uid: "sf_123",
+        metadata: %{"instance_url" => "https://myorg.my.salesforce.com"}
+      }
+
+      assert SalesforceProvider.credential_sublabel(credential) == "myorg.my.salesforce.com"
+    end
+
+    test "credential_sublabel returns nil when instance_url is absent" do
+      credential = %SocialScribe.Accounts.UserCredential{
+        email: "user@example.com",
+        uid: "sf_123",
+        metadata: %{}
+      }
+
+      assert SalesforceProvider.credential_sublabel(credential) == nil
+    end
+
+    test "credential_sublabel returns nil when metadata is nil" do
+      credential = %SocialScribe.Accounts.UserCredential{
+        email: "user@example.com",
+        uid: "sf_123",
+        metadata: nil
+      }
+
+      assert SalesforceProvider.credential_sublabel(credential) == nil
+    end
+  end
+
+  describe "multi-account selection" do
+    setup %{conn: conn} do
+      user = user_fixture()
+      cred1 = salesforce_credential_fixture(%{
+        user_id: user.id,
+        email: "org1@example.com",
+        metadata: %{"instance_url" => "https://org1.my.salesforce.com"}
+      })
+      cred2 = salesforce_credential_fixture(%{
+        user_id: user.id,
+        email: "org2@example.com",
+        metadata: %{"instance_url" => "https://org2.my.salesforce.com"}
+      })
+      meeting = meeting_fixture_with_transcript(user)
+
+      %{
+        conn: log_in_user(conn, user),
+        user: user,
+        meeting: meeting,
+        cred1: cred1,
+        cred2: cred2
+      }
+    end
+
+    test "renders account dropdown button when user has 2+ credentials", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
+
+      assert has_element?(view, "button[phx-click='toggle_account_dropdown']")
+      assert render(view) =~ "org1@example.com"
+      assert render(view) =~ "org1.my.salesforce.com"
+    end
+
+    test "account dropdown is NOT shown when user has only 1 credential", %{
+      conn: conn,
+      meeting: meeting,
+      cred1: cred1,
+      cred2: cred2
+    } do
+      SocialScribe.Accounts.delete_user_credential(cred2)
+
+      {:ok, view, _html} =
+        live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
+
+      refute has_element?(view, "button[phx-click='toggle_account_dropdown']")
+
+      _ = cred1
+    end
+
+    test "toggling account dropdown opens the credential listbox", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
+
+      refute has_element?(view, "div[role='listbox']")
+
+      view
+      |> element("button[phx-click='toggle_account_dropdown']")
+      |> render_click()
+
+      assert has_element?(view, "div[role='listbox']")
+      assert render(view) =~ "org1@example.com"
+      assert render(view) =~ "org2@example.com"
+    end
+
+    test "selecting an account closes the dropdown and resets contact state", %{
+      conn: conn,
+      meeting: meeting,
+      cred1: _cred1,
+      cred2: cred2
+    } do
+      mock_contacts = [
+        %{
+          id: "003abc",
+          firstname: "Dana",
+          lastname: "Lee",
+          email: "dana@example.com",
+          phone: nil,
+          display_name: "Dana Lee"
+        }
+      ]
+
+      SocialScribe.SalesforceApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, mock_contacts} end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
+
+      view
+      |> element("input[phx-focus='open_contact_dropdown']")
+      |> render_focus()
+
+      :timer.sleep(200)
+
+      assert render(view) =~ "Dana Lee"
+
+      view
+      |> element("button[phx-click='toggle_account_dropdown']")
+      |> render_click()
+
+      view
+      |> element("button[phx-click='select_account'][phx-value-credential_id='#{cred2.id}']")
+      |> render_click()
+
+      html = render(view)
+
+      refute has_element?(view, "div[role='listbox']")
+      refute html =~ "Dana Lee"
     end
   end
 

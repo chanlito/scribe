@@ -26,32 +26,28 @@ defmodule SocialScribeWeb.SalesforceModalTest do
       assert has_element?(view, "h2", "Update in Salesforce")
     end
 
-    test "displays contact search input when only one Salesforce account exists", %{
+    test "does not show account selector when only one Salesforce account exists", %{
       conn: conn,
       meeting: meeting
     } do
       {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
       assert has_element?(view, "input[phx-keyup='contact_search']")
-      refute has_element?(view, "select[name='credential_id']")
+      refute has_element?(view, "button[phx-click='toggle_account_dropdown']")
     end
 
-    test "shows Salesforce account selector when multiple accounts exist", %{
+    test "shows custom account selector when multiple accounts exist", %{
       conn: conn,
       user: user,
       meeting: meeting
     } do
-      _other = salesforce_credential_fixture(%{user_id: user.id})
+      other = salesforce_credential_fixture(%{user_id: user.id})
 
       {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/salesforce")
 
-      assert has_element?(view, "select[name='credential_id']")
-      assert has_element?(view, "label[for='salesforce-modal-wrapper-credential-select']")
+      assert has_element?(view, "button[phx-click='toggle_account_dropdown']")
 
-      assert has_element?(
-               view,
-               "select#salesforce-modal-wrapper-credential-select[name='credential_id']"
-             )
+      _ = other
     end
   end
 

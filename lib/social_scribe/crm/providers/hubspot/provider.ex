@@ -44,9 +44,15 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   end
 
   @impl true
-  def default_credential([credential]), do: credential
+  def default_credential([credential | _]), do: credential
 
-  def default_credential(_credentials), do: nil
+  def default_credential([]), do: nil
+
+  @impl true
+  def credential_label(credential), do: credential.email || credential.uid
+
+  @impl true
+  def credential_sublabel(_credential), do: nil
 
   @impl true
   def list_contacts(credential, query) do
@@ -157,7 +163,9 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
   end
 
   @impl true
-  def format_search_error(reason), do: "Failed to search contacts: #{inspect(reason)}"
+  def format_search_error(reason) do
+    %{title: "Failed to search contacts", errors: [%{code: nil, message: inspect(reason)}]}
+  end
 
   @impl true
   defdelegate format_suggestion_error(reason), to: SocialScribe.CRM.GeminiErrors

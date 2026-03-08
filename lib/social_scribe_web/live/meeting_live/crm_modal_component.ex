@@ -21,8 +21,6 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           length(assigns.credentials) > 1
       )
 
-    assigns = assign(assigns, :credential_select_id, "#{assigns.modal_id}-credential-select")
-
     ~H"""
     <div class="space-y-6">
       <div>
@@ -35,29 +33,16 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
         </p>
       </div>
 
-      <div :if={@requires_account_selection} class="space-y-1">
-        <label for={@credential_select_id} class="block text-sm font-medium text-slate-700">
-          {@provider.account_select_label()}
-        </label>
-        <select
-          id={@credential_select_id}
-          class="w-full bg-white border border-hubspot-input rounded-lg py-2 px-3 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-          phx-change="select_account"
-          phx-target={@myself}
-          name="credential_id"
-        >
-          <option value="">Choose an account...</option>
-          <option
-            :for={credential <- @credentials}
-            value={credential.id}
-            selected={
-              @selected_credential && to_string(@selected_credential.id) == to_string(credential.id)
-            }
-          >
-            {credential.email || credential.uid}
-          </option>
-        </select>
-      </div>
+      <.account_select
+        :if={@requires_account_selection}
+        credentials={@credentials}
+        selected_credential={@selected_credential}
+        label={@provider.account_select_label()}
+        open={@account_dropdown_open}
+        target={@myself}
+        credential_label_fn={fn cred -> @provider.credential_label(cred) end}
+        credential_sublabel_fn={fn cred -> @provider.credential_sublabel(cred) end}
+      />
 
       <.contact_select
         selected_contact={@selected_contact}
@@ -372,7 +357,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           No change detected for this mapped field.
         </p>
 
-        <p :if={@suggestion[:pair_warning]} class="text-xs text-slate-500 mt-2">
+        <p :if={@suggestion[:pair_warning]} class="text-xs text-rose-600 mt-2">
           {@suggestion[:pair_warning]}
         </p>
 
@@ -433,11 +418,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
     credentials = Map.get(assigns, :credentials, socket.assigns[:credentials] || [])
 
     selected_credential =
-      Map.get(
-        assigns,
-        :selected_credential,
-        socket.assigns[:selected_credential] || provider.default_credential(credentials)
-      )
+      socket.assigns[:selected_credential] || provider.default_credential(credentials)
 
     socket =
       socket
@@ -460,6 +441,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
       |> assign_new(:updating, fn -> false end)
       |> assign_new(:searching, fn -> false end)
       |> assign_new(:dropdown_open, fn -> false end)
+      |> assign_new(:account_dropdown_open, fn -> false end)
       |> assign_new(:error, fn -> nil end)
 
     {:ok, socket}
@@ -493,7 +475,8 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
     {:noreply,
      socket
-     |> assign(:selected_credential, credential)
+     |> assign(:selected_credential, credential || socket.assigns.selected_credential)
+     |> assign(:account_dropdown_open, false)
      |> assign(:selected_contact, nil)
      |> assign(:contacts, [])
      |> assign(:contacts_full, [])
@@ -516,10 +499,17 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
     case ensure_credential(socket) do
       {:error, message, socket} ->
-        {:noreply, assign(socket, error: message, searching: false, dropdown_open: false)}
+        {:noreply, assign(socket, error: format_error(message), searching: false, dropdown_open: false)}
 
       {:ok, credential, socket} ->
-        socket = assign(socket, searching: true, error: nil, query: query, dropdown_open: true)
+        socket =
+          assign(socket,
+            searching: true,
+            error: nil,
+            query: query,
+            dropdown_open: true
+          )
+
         send(self(), {:crm_search, socket.assigns.provider, query, credential})
         {:noreply, socket}
     end
@@ -529,10 +519,18 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   def handle_event("open_contact_dropdown", _params, socket) do
     case ensure_credential(socket) do
       {:error, message, socket} ->
-        {:noreply, assign(socket, dropdown_open: false, error: message, searching: false)}
+        {:noreply,
+         assign(socket, dropdown_open: false, error: format_error(message), searching: false)}
 
       {:ok, credential, socket} ->
-        socket = assign(socket, dropdown_open: true, searching: true, error: nil, query: "")
+        socket =
+          assign(socket,
+            dropdown_open: true,
+            searching: true,
+            error: nil,
+            query: ""
+          )
+
         send(self(), {:crm_list_contacts, socket.assigns.provider, credential})
         {:noreply, socket}
     end
@@ -558,16 +556,32 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   end
 
   @impl true
+  def handle_event("toggle_account_dropdown", _params, socket) do
+    {:noreply, assign(socket, account_dropdown_open: !socket.assigns.account_dropdown_open)}
+  end
+
+  @impl true
+  def handle_event("close_account_dropdown", _params, socket) do
+    {:noreply, assign(socket, account_dropdown_open: false)}
+  end
+
+  @impl true
   def handle_event("toggle_contact_dropdown", _params, socket) do
     if socket.assigns.dropdown_open do
       {:noreply, assign(socket, dropdown_open: false)}
     else
       case ensure_credential(socket) do
         {:error, message, socket} ->
-          {:noreply, assign(socket, dropdown_open: false, error: message, searching: false)}
+          {:noreply,
+           assign(socket, dropdown_open: false, error: format_error(message), searching: false)}
 
         {:ok, credential, socket} ->
-          socket = assign(socket, dropdown_open: true, searching: true, error: nil)
+          socket =
+            assign(socket,
+              dropdown_open: true,
+              searching: true,
+              error: nil
+            )
 
           query =
             "#{socket.assigns.selected_contact.firstname} #{socket.assigns.selected_contact.lastname}"
@@ -603,7 +617,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
       {:noreply, socket}
     else
-      {:noreply, assign(socket, error: "Contact not found")}
+      {:noreply, assign(socket, error: format_error("Contact not found"))}
     end
   end
 
@@ -714,6 +728,10 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
   @impl true
   def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  defp format_error(message) when is_binary(message) do
+    %{title: "Error", errors: [%{code: nil, message: message}]}
+  end
 
   defp ensure_credential(socket) do
     provider = socket.assigns.provider

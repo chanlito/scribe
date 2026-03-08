@@ -15,6 +15,8 @@ defmodule SocialScribe.CRM.Provider do
 
   @callback list_credentials(User.t()) :: [UserCredential.t()]
   @callback default_credential([UserCredential.t()]) :: UserCredential.t() | nil
+  @callback credential_label(UserCredential.t()) :: String.t()
+  @callback credential_sublabel(UserCredential.t()) :: String.t() | nil
 
   @callback list_contacts(UserCredential.t(), String.t()) :: {:ok, [map()]} | {:error, any()}
 
@@ -33,7 +35,7 @@ defmodule SocialScribe.CRM.Provider do
   @callback update_contact(UserCredential.t(), String.t(), map()) ::
               {:ok, map() | :no_updates} | {:error, any()}
 
-  @callback format_search_error(any()) :: String.t()
-  @callback format_suggestion_error(any()) :: String.t()
+  @callback format_search_error(any()) :: map()
+  @callback format_suggestion_error(any()) :: map()
   @callback format_update_error(any()) :: map()
 end

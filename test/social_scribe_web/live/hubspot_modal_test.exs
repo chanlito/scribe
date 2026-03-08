@@ -29,7 +29,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
     test "displays contact search input", %{conn: conn, meeting: meeting} do
       {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
 
-      assert has_element?(view, "input[placeholder*='Search']")
+      assert has_element?(view, "input[phx-keyup='contact_search']")
     end
 
     test "shows contact search initially without suggestions form", %{
@@ -116,7 +116,6 @@ defmodule SocialScribeWeb.HubspotModalTest do
 
       # Verify the search input exists and has the correct attributes
       assert has_element?(view, "input[phx-keyup='contact_search']")
-      assert has_element?(view, "input[placeholder*='Search']")
       assert has_element?(view, "#hubspot-modal-wrapper")
     end
   end

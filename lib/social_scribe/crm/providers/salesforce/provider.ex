@@ -41,9 +41,20 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
   end
 
   @impl true
-  def default_credential([credential]), do: credential
+  def default_credential([credential | _]), do: credential
 
-  def default_credential(_credentials), do: nil
+  def default_credential([]), do: nil
+
+  @impl true
+  def credential_label(credential), do: credential.email || credential.uid
+
+  @impl true
+  def credential_sublabel(credential) do
+    case get_in(credential.metadata, ["instance_url"]) do
+      nil -> nil
+      instance_url -> String.replace_prefix(instance_url, "https://", "")
+    end
+  end
 
   @impl true
   def list_contacts(credential, query) do
@@ -141,9 +152,13 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
   end
 
   @impl true
-  def format_search_error({:reconnect_required, message}) when is_binary(message), do: message
+  def format_search_error({:reconnect_required, message}) when is_binary(message) do
+    %{title: "Salesforce connection required", errors: [%{code: nil, message: message}]}
+  end
 
-  def format_search_error(reason), do: "Failed to search contacts: #{inspect(reason)}"
+  def format_search_error(reason) do
+    %{title: "Failed to search contacts", errors: [%{code: nil, message: inspect(reason)}]}
+  end
 
   @impl true
   defdelegate format_suggestion_error(reason), to: SocialScribe.CRM.GeminiErrors
