@@ -32,7 +32,7 @@ defmodule SocialScribeWeb.UserSessionController do
       conn
       |> put_flash(:error, "Invalid email or password")
       |> put_flash(:email, String.slice(email, 0, 160))
-      |> redirect(to: ~p"/users/log_in")
+      |> redirect(to: ~p"/")
     end
   end
 

@@ -13,7 +13,7 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
     test "redirects if user is not logged in", %{conn: conn} do
       conn = recycle(conn)
       {:error, {:redirect, %{to: path}}} = live(conn, ~p"/dashboard/settings")
-      assert path == ~p"/users/log_in"
+      assert path == ~p"/"
     end
 
     test "renders settings page for logged-in user", %{conn: conn} do
