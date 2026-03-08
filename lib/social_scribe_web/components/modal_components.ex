@@ -31,13 +31,13 @@ defmodule SocialScribeWeb.ModalComponents do
   attr :open, :boolean, default: false
   attr :query, :string, default: ""
   attr :target, :any, default: nil
-  attr :error, :string, default: nil
+  attr :error, :any, default: nil
   attr :id, :string, default: "contact-select"
   attr :has_more, :boolean, default: false
 
   def contact_select(assigns) do
     ~H"""
-    <div class="space-y-1">
+    <div class="space-y-2">
       <label for={"#{@id}-input"} class="block text-sm font-medium text-slate-700">
         Select Contact
       </label>
@@ -160,7 +160,7 @@ defmodule SocialScribeWeb.ModalComponents do
           </button>
         </div>
       </div>
-      <.inline_error :if={@error} message={@error} />
+      <.crm_error :if={@error} error={@error} />
     </div>
     """
   end
@@ -587,9 +587,50 @@ defmodule SocialScribeWeb.ModalComponents do
 
   def inline_error(assigns) do
     ~H"""
-    <p class={["text-red-600 text-sm", @class]} role="alert" aria-live="assertive">
-      {@message}
-    </p>
+    <div
+      class={["flex gap-2.5 rounded-lg border border-rose-200 bg-rose-50 p-3", @class]}
+      role="alert"
+      aria-live="assertive"
+    >
+      <.icon name="hero-exclamation-circle" class="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+      <p class="text-sm text-rose-700">{@message}</p>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a structured CRM error with a title, optional error-code chip, and message.
+
+  ## Examples
+
+      <.crm_error :if={@error} error={@error} />
+  """
+  attr :error, :map, required: true
+  attr :class, :string, default: nil
+
+  def crm_error(assigns) do
+    ~H"""
+    <div
+      class={["rounded-lg border border-rose-200 bg-rose-50 p-4", @class]}
+      role="alert"
+      aria-live="assertive"
+    >
+      <div class="flex items-center gap-2 mb-3">
+        <.icon name="hero-exclamation-circle" class="h-4 w-4 shrink-0 text-rose-500" />
+        <p class="text-sm font-semibold text-rose-800">{@error.title}</p>
+      </div>
+      <div class="space-y-2.5 pl-6">
+        <div :for={err <- @error.errors} class="space-y-1.5">
+          <span
+            :if={err.code}
+            class="inline-flex items-center rounded-full border border-rose-300 bg-white px-2.5 py-0.5 font-mono text-xs font-medium text-rose-600"
+          >
+            {err.code}
+          </span>
+          <p class="text-sm text-rose-700">{err.message}</p>
+        </div>
+      </div>
+    </div>
     """
   end
 

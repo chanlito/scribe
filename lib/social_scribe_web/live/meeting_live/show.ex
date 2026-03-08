@@ -185,12 +185,17 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         {:noreply, socket}
 
       {:error, reason} ->
+        error = provider.format_update_error(reason)
+
         send_update(CrmModalComponent,
           id: modal_component_id(provider),
-          error: provider.format_update_error(reason),
+          error: error,
           loading: false,
           updating: false
         )
+
+        messages = Enum.map_join(error.errors, "; ", & &1.message)
+        socket = put_flash(socket, :error, "#{error.title}: #{messages}")
 
         {:noreply, assign(socket, :crm_modal_locked, false)}
     end

@@ -155,32 +155,31 @@ defmodule SocialScribe.CRM.Providers.Salesforce.Provider do
 
   @impl true
   def format_update_error({:invalid_updates, errors}) when is_list(errors) do
-    details =
-      errors
-      |> Enum.map(fn error ->
+    error_list =
+      Enum.map(errors, fn error ->
         field = Map.get(error, :field, "unknown field")
         message = Map.get(error, :message, "invalid value")
-        "#{field}: #{message}"
+        %{code: nil, message: "#{field}: #{message}"}
       end)
-      |> Enum.join("; ")
 
-    "Some values could not be validated for Salesforce: #{details}"
+    %{title: "Some values could not be validated for Salesforce", errors: error_list}
   end
 
   def format_update_error({:api_error, 400, body}) when is_list(body) do
-    details =
-      body
-      |> Enum.map(fn entry ->
-        code = Map.get(entry, "errorCode", "UNKNOWN")
-        message = Map.get(entry, "message", "Unknown Salesforce error")
-        "#{code}: #{message}"
+    error_list =
+      Enum.map(body, fn entry ->
+        %{
+          code: Map.get(entry, "errorCode"),
+          message: Map.get(entry, "message", "Unknown Salesforce error")
+        }
       end)
-      |> Enum.join("; ")
 
-    "Salesforce rejected the update: #{details}"
+    %{title: "Salesforce rejected the update", errors: error_list}
   end
 
-  def format_update_error(reason), do: "Failed to update contact: #{inspect(reason)}"
+  def format_update_error(reason) do
+    %{title: "Failed to update contact", errors: [%{code: nil, message: inspect(reason)}]}
+  end
 
   defp prepare_suggestion(suggestion, idx, selected_contact, mapping_fields) do
     mapped_field =

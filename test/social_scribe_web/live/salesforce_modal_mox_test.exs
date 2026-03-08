@@ -867,7 +867,8 @@ defmodule SocialScribeWeb.SalesforceModalMoxTest do
       :timer.sleep(200)
       html = render(view)
 
-      assert html =~ "Salesforce rejected the update: FIELD_INTEGRITY_EXCEPTION"
+      assert html =~ "Salesforce rejected the update"
+      assert html =~ "FIELD_INTEGRITY_EXCEPTION"
     end
 
     test "malformed field-name suggestions do not render in the Salesforce modal", %{

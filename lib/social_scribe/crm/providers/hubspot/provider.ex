@@ -169,31 +169,42 @@ defmodule SocialScribe.CRM.Providers.Hubspot.Provider do
 
   @impl true
   def format_update_error({:api_error, 400, %{"message" => message}}) when is_binary(message) do
-    "HubSpot rejected the update: #{message}"
+    %{title: "HubSpot rejected the update", errors: [%{code: nil, message: message}]}
   end
 
   def format_update_error({:api_error, 400, body}) when is_list(body) do
-    details =
-      body
-      |> Enum.map(fn entry -> Map.get(entry, "message", "Unknown error") end)
-      |> Enum.join("; ")
+    error_list =
+      Enum.map(body, fn entry ->
+        %{code: nil, message: Map.get(entry, "message", "Unknown error")}
+      end)
 
-    "HubSpot rejected the update: #{details}"
+    %{title: "HubSpot rejected the update", errors: error_list}
   end
 
   def format_update_error({:api_error, status, _body}) do
-    "HubSpot API error (#{status}). Please try again."
+    %{
+      title: "HubSpot API error (#{status})",
+      errors: [%{code: nil, message: "Please try again."}]
+    }
   end
 
   def format_update_error({:http_error, _reason}) do
-    "Could not connect to HubSpot. Please check your connection and try again."
+    %{
+      title: "Could not connect to HubSpot",
+      errors: [%{code: nil, message: "Please check your connection and try again."}]
+    }
   end
 
   def format_update_error({:token_refresh_failed, _reason}) do
-    "Your HubSpot session has expired. Please reconnect HubSpot and try again."
+    %{
+      title: "HubSpot session expired",
+      errors: [%{code: nil, message: "Please reconnect HubSpot and try again."}]
+    }
   end
 
-  def format_update_error(reason), do: "Failed to update contact: #{inspect(reason)}"
+  def format_update_error(reason) do
+    %{title: "Failed to update contact", errors: [%{code: nil, message: inspect(reason)}]}
+  end
 
   defp prepare_row(suggestion, idx, mapping_fields) do
     field = Map.get(suggestion, :mapped_field, Map.get(suggestion, :field))

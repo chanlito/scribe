@@ -35,5 +35,5 @@ defmodule SocialScribe.CRM.Provider do
 
   @callback format_search_error(any()) :: String.t()
   @callback format_suggestion_error(any()) :: String.t()
-  @callback format_update_error(any()) :: String.t()
+  @callback format_update_error(any()) :: map()
 end

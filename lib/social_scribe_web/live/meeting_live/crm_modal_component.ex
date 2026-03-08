@@ -372,7 +372,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           No change detected for this mapped field.
         </p>
 
-        <p :if={@suggestion[:pair_warning]} class="text-xs text-destructive mt-2">
+        <p :if={@suggestion[:pair_warning]} class="text-xs text-slate-500 mt-2">
           {@suggestion[:pair_warning]}
         </p>
 
