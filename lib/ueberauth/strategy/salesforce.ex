@@ -25,6 +25,7 @@ defmodule Ueberauth.Strategy.Salesforce do
 
       params =
         [scope: scopes, redirect_uri: redirect_uri]
+        |> with_param(:prompt, conn)
         |> with_state_param(conn)
 
       oauth_opts = [site: "https://#{host}"]
@@ -240,6 +241,10 @@ defmodule Ueberauth.Strategy.Salesforce do
     |> Plug.Conn.put_resp_content_type("text/plain")
     |> Plug.Conn.send_resp(400, reason)
     |> Plug.Conn.halt()
+  end
+
+  defp with_param(opts, key, conn) do
+    if value = conn.params[to_string(key)], do: Keyword.put(opts, key, value), else: opts
   end
 
   defp option(conn, key) do
